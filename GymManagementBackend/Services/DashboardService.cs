@@ -56,10 +56,10 @@ namespace GymManagementBackend.Services
 
                 var stats = new DashboardStatsDto();
 
-                // Total active members
+                // Total active members (date-driven; paused members are excluded)
                 stats.TotalActiveMembers = await _context.Members
                     .CountAsync(m => m.GymId == gymId && 
-                                      m.Status == "ACTIVE" && 
+                                      m.Status != "PAUSED" &&
                                       m.PlanEndDate >= today);
 
                 // New joins this month
@@ -82,17 +82,17 @@ namespace GymManagementBackend.Services
                     .Select(p => (decimal?)p.Amount)
                     .SumAsync()) ?? 0m;
 
-                // Expiring in next 7 days
+                // Expiring in next 7 days (date-driven; paused members are excluded)
                 stats.ExpiringInNext7Days = await _context.Members
                     .CountAsync(m => m.GymId == gymId && 
                                       m.PlanEndDate >= today && 
                                       m.PlanEndDate <= nextWeek &&
-                                      m.Status != "EXPIRED");
+                                      m.Status != "PAUSED");
 
-                // Expired members
+                // Expired members (strictly date-driven)
                 stats.ExpiredMembers = await _context.Members
                     .CountAsync(m => m.GymId == gymId && 
-                                      (m.Status == "EXPIRED" || m.PlanEndDate < today));
+                                      m.PlanEndDate < today);
 
                 return stats;
             }

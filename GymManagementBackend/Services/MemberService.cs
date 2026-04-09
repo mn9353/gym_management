@@ -52,7 +52,7 @@ namespace GymManagementBackend.Services
                     TrainerAssigned = createMemberDto.TrainerAssigned?.Trim(),
                     LeadSource = createMemberDto.LeadSource?.Trim(),
                     Notes = createMemberDto.Notes?.Trim(),
-                    Status = "ACTIVE"
+                    Status = ResolveStatusFromPlanEndDate(createMemberDto.PlanEndDate)
                 };
 
                 _context.Members.Add(member);
@@ -109,6 +109,8 @@ namespace GymManagementBackend.Services
 
                 if (!string.IsNullOrEmpty(updateMemberDto.Status))
                     member.Status = updateMemberDto.Status;
+                else if (!string.Equals(member.Status, "PAUSED", StringComparison.OrdinalIgnoreCase))
+                    member.Status = ResolveStatusFromPlanEndDate(member.PlanEndDate);
 
                 if (!string.IsNullOrEmpty(updateMemberDto.EmergencyContact))
                     member.EmergencyContact = updateMemberDto.EmergencyContact;
@@ -282,6 +284,12 @@ namespace GymManagementBackend.Services
             {
                 throw new InvalidOperationException("Plan end date must be after or equal to plan start date.");
             }
+        }
+
+        private static string ResolveStatusFromPlanEndDate(DateOnly planEndDate)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            return planEndDate < today ? "EXPIRED" : "ACTIVE";
         }
     }
 }

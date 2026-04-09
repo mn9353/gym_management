@@ -19,6 +19,7 @@ if (builder.Environment.IsDevelopment())
 }
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+builder.Services.Configure<MembershipStatusJobSettings>(builder.Configuration.GetSection("MembershipStatusJob"));
 var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 builder.Services.AddSingleton(jwtSettings);
 
@@ -110,6 +111,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddHostedService<MembershipStatusSyncBackgroundService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
