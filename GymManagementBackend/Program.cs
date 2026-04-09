@@ -94,7 +94,7 @@ builder.Services.AddCors(options =>
     {
         if (allowedOrigins.Length == 0)
         {
-            policy.WithOrigins("http://localhost:4200", "http://127.0.0.1:4200")
+            policy.WithOrigins("http://localhost:4200", "http://127.0.0.1:4200", "https://gym-management-frontend-4rieyk5oo-mn9353s-projects.vercel.app")
                 .AllowAnyHeader()
                 .AllowAnyMethod();
             return;
