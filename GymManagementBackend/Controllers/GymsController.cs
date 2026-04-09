@@ -1,0 +1,58 @@
+using GymManagementBackend.DTOs;
+using GymManagementBackend.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GymManagementBackend.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize(Policy = "AdminOnly")]
+    public class GymsController : ControllerBase
+    {
+        private readonly IAdminService _adminService;
+        private readonly ILogger<GymsController> _logger;
+
+        public GymsController(IAdminService adminService, ILogger<GymsController> logger)
+        {
+            _adminService = adminService;
+            _logger = logger;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetGyms()
+        {
+            var gyms = await _adminService.GetGymsAsync();
+            return Ok(gyms);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> CreateGym([FromBody] CreateGymDto request)
+        {
+            try
+            {
+                var gym = await _adminService.CreateGymAsync(request);
+                return Created($"/api/gyms/{gym.Id}", gym);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Create gym validation failed.");
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPut("{gymId:guid}")]
+        public async Task<IActionResult> UpdateGym(Guid gymId, [FromBody] UpdateGymDto request)
+        {
+            try
+            {
+                var gym = await _adminService.UpdateGymAsync(gymId, request);
+                return Ok(gym);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+    }
+}
