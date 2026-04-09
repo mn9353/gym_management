@@ -30,9 +30,7 @@ namespace GymManagementBackend.Services
 
         public async Task<List<GymDto>> GetGymsAsync()
         {
-            return await BuildGymProjectionQuery()
-                .OrderBy(g => g.GymName)
-                .ToListAsync();
+            return await GetGymsWithCountsAsync();
         }
 
         public async Task<GymDto> CreateGymAsync(CreateGymDto request)
@@ -64,8 +62,7 @@ namespace GymManagementBackend.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Gym created: {GymId}", gym.Id);
-            return await BuildGymProjectionQuery()
-                .FirstAsync(g => g.Id == gym.Id);
+            return (await GetGymsWithCountsAsync(gym.Id)).Single();
         }
 
         public async Task<GymDto> UpdateGymAsync(Guid gymId, UpdateGymDto request)
@@ -85,8 +82,7 @@ namespace GymManagementBackend.Services
             gym.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
-            return await BuildGymProjectionQuery()
-                .FirstAsync(g => g.Id == gym.Id);
+            return (await GetGymsWithCountsAsync(gym.Id)).Single();
         }
 
         public async Task<List<AppUserDto>> GetUsersAsync(Guid? gymId = null)
@@ -164,24 +160,60 @@ namespace GymManagementBackend.Services
             return MapUser(user);
         }
 
-        private IQueryable<GymDto> BuildGymProjectionQuery()
+        private async Task<List<GymDto>> GetGymsWithCountsAsync(Guid? gymId = null)
         {
-            return _context.Gyms.Select(g => new GymDto
+            var gymsQuery = _context.Gyms.AsQueryable();
+            if (gymId.HasValue)
             {
-                Id = g.Id,
-                GymName = g.GymName,
-                OwnerName = g.OwnerName,
-                Phone = g.Phone,
-                Email = g.Email,
-                Address = g.Address,
-                City = g.City,
-                State = g.State,
-                SubscriptionPlan = g.SubscriptionPlan,
-                IsActive = g.IsActive,
-                UsersCount = g.Users.Count(),
-                MembersCount = g.Members.Count(),
-                CreatedAt = g.CreatedAt
-            });
+                gymsQuery = gymsQuery.Where(g => g.Id == gymId.Value);
+            }
+
+            var gyms = await gymsQuery
+                .OrderBy(g => g.GymName)
+                .Select(g => new GymDto
+                {
+                    Id = g.Id,
+                    GymName = g.GymName,
+                    OwnerName = g.OwnerName,
+                    Phone = g.Phone,
+                    Email = g.Email,
+                    Address = g.Address,
+                    City = g.City,
+                    State = g.State,
+                    SubscriptionPlan = g.SubscriptionPlan,
+                    IsActive = g.IsActive,
+                    UsersCount = 0,
+                    MembersCount = 0,
+                    CreatedAt = g.CreatedAt
+                })
+                .ToListAsync();
+
+            if (gyms.Count == 0)
+            {
+                return gyms;
+            }
+
+            var gymIds = gyms.Select(g => g.Id).ToList();
+
+            var userCounts = await _context.Users
+                .Where(u => u.GymId.HasValue && gymIds.Contains(u.GymId.Value))
+                .GroupBy(u => u.GymId!.Value)
+                .Select(g => new { GymId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.GymId, x => x.Count);
+
+            var memberCounts = await _context.Members
+                .Where(m => gymIds.Contains(m.GymId))
+                .GroupBy(m => m.GymId)
+                .Select(g => new { GymId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.GymId, x => x.Count);
+
+            foreach (var gym in gyms)
+            {
+                gym.UsersCount = userCounts.TryGetValue(gym.Id, out var uc) ? uc : 0;
+                gym.MembersCount = memberCounts.TryGetValue(gym.Id, out var mc) ? mc : 0;
+            }
+
+            return gyms;
         }
 
         private static AppUserDto MapUser(User user)
