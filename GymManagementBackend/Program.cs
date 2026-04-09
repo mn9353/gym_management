@@ -145,7 +145,17 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UseHttpsRedirection();
+    // Render terminates TLS at the edge; inside container traffic is HTTP.
+    // Redirecting to HTTPS from inside the app can break health checks.
+    var isRender = string.Equals(
+        Environment.GetEnvironmentVariable("RENDER"),
+        "true",
+        StringComparison.OrdinalIgnoreCase);
+
+    if (!isRender)
+    {
+        app.UseHttpsRedirection();
+    }
 }
 
 
