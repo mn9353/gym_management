@@ -30,22 +30,8 @@ namespace GymManagementBackend.Services
 
         public async Task<List<GymDto>> GetGymsAsync()
         {
-            return await _context.Gyms
+            return await BuildGymProjectionQuery()
                 .OrderBy(g => g.GymName)
-                .Select(g => new GymDto
-                {
-                    Id = g.Id,
-                    GymName = g.GymName,
-                    OwnerName = g.OwnerName,
-                    Phone = g.Phone,
-                    Email = g.Email,
-                    Address = g.Address,
-                    City = g.City,
-                    State = g.State,
-                    SubscriptionPlan = g.SubscriptionPlan,
-                    IsActive = g.IsActive,
-                    CreatedAt = g.CreatedAt
-                })
                 .ToListAsync();
         }
 
@@ -78,7 +64,8 @@ namespace GymManagementBackend.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Gym created: {GymId}", gym.Id);
-            return MapGym(gym);
+            return await BuildGymProjectionQuery()
+                .FirstAsync(g => g.Id == gym.Id);
         }
 
         public async Task<GymDto> UpdateGymAsync(Guid gymId, UpdateGymDto request)
@@ -98,7 +85,8 @@ namespace GymManagementBackend.Services
             gym.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
-            return MapGym(gym);
+            return await BuildGymProjectionQuery()
+                .FirstAsync(g => g.Id == gym.Id);
         }
 
         public async Task<List<AppUserDto>> GetUsersAsync(Guid? gymId = null)
@@ -176,22 +164,24 @@ namespace GymManagementBackend.Services
             return MapUser(user);
         }
 
-        private static GymDto MapGym(Gym gym)
+        private IQueryable<GymDto> BuildGymProjectionQuery()
         {
-            return new GymDto
+            return _context.Gyms.Select(g => new GymDto
             {
-                Id = gym.Id,
-                GymName = gym.GymName,
-                OwnerName = gym.OwnerName,
-                Phone = gym.Phone,
-                Email = gym.Email,
-                Address = gym.Address,
-                City = gym.City,
-                State = gym.State,
-                SubscriptionPlan = gym.SubscriptionPlan,
-                IsActive = gym.IsActive,
-                CreatedAt = gym.CreatedAt
-            };
+                Id = g.Id,
+                GymName = g.GymName,
+                OwnerName = g.OwnerName,
+                Phone = g.Phone,
+                Email = g.Email,
+                Address = g.Address,
+                City = g.City,
+                State = g.State,
+                SubscriptionPlan = g.SubscriptionPlan,
+                IsActive = g.IsActive,
+                UsersCount = g.Users.Count(),
+                MembersCount = g.Members.Count(),
+                CreatedAt = g.CreatedAt
+            });
         }
 
         private static AppUserDto MapUser(User user)

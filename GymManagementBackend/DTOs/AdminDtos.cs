@@ -14,6 +14,8 @@ namespace GymManagementBackend.DTOs
         public string? State { get; set; }
         public string SubscriptionPlan { get; set; } = "basic";
         public bool IsActive { get; set; }
+        public int UsersCount { get; set; }
+        public int MembersCount { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 
