@@ -90,20 +90,10 @@ builder.Services.AddAuthorization(options =>
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AppCors", policy =>
-    {
-        if (allowedOrigins.Length == 0)
-        {
-            policy.WithOrigins("http://localhost:4200", "http://127.0.0.1:4200", "https://gym-management-frontend-4rieyk5oo-mn9353s-projects.vercel.app")
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-            return;
-        }
-
-        policy.WithOrigins(allowedOrigins)
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
+    options.AddPolicy("AllowAll", policy =>
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader());
 });
 
 builder.Services.AddScoped<JwtTokenUtil>();
