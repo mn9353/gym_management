@@ -55,6 +55,35 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpPost("owner")]
+        public async Task<IActionResult> CreateUserForOwner([FromBody] OwnerCreateUserDto request)
+        {
+            try
+            {
+                var gymId = ResolveGymId(null);
+                if (!gymId.HasValue)
+                {
+                    return Unauthorized(new { message = "Gym context is missing for owner account." });
+                }
+
+                var user = await _adminService.CreateUserForGymAsync(gymId.Value, request);
+                return Created($"/api/users/{user.Id}", user);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Owner create user validation failed.");
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
         [HttpPut("{userId:guid}")]
         [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> UpdateUser(Guid userId, [FromBody] UpdateUserDto request)

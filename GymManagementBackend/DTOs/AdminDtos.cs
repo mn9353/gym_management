@@ -116,6 +116,30 @@ namespace GymManagementBackend.DTOs
         public string Role { get; set; } = "OWNER";
     }
 
+    public class OwnerCreateUserDto
+    {
+        [Required]
+        [StringLength(100)]
+        public string FullName { get; set; } = string.Empty;
+
+        [Required]
+        [EmailAddress]
+        [StringLength(100)]
+        public string Email { get; set; } = string.Empty;
+
+        [StringLength(15)]
+        public string? Phone { get; set; }
+
+        [Required]
+        [MinLength(6)]
+        [MaxLength(100)]
+        public string Password { get; set; } = string.Empty;
+
+        [Required]
+        [RegularExpression("^(STAFF)$")]
+        public string Role { get; set; } = "STAFF";
+    }
+
     public class UpdateUserDto
     {
         [StringLength(100)]

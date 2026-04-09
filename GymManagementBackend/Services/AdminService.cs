@@ -14,6 +14,7 @@ namespace GymManagementBackend.Services
         Task<GymDto> UpdateGymAsync(Guid gymId, UpdateGymDto request);
         Task<List<AppUserDto>> GetUsersAsync(Guid? gymId = null);
         Task<AppUserDto> CreateUserAsync(CreateUserDto request);
+        Task<AppUserDto> CreateUserForGymAsync(Guid gymId, OwnerCreateUserDto request);
         Task<AppUserDto> UpdateUserAsync(Guid userId, UpdateUserDto request);
     }
 
@@ -134,6 +135,44 @@ namespace GymManagementBackend.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("User created: {UserId}", user.Id);
+            return MapUser(user);
+        }
+
+        public async Task<AppUserDto> CreateUserForGymAsync(Guid gymId, OwnerCreateUserDto request)
+        {
+            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+            if (await _context.Users.AnyAsync(u => u.Email.ToLower() == normalizedEmail))
+            {
+                throw new InvalidOperationException("Email already exists.");
+            }
+
+            if (!await _context.Gyms.AnyAsync(g => g.Id == gymId))
+            {
+                throw new KeyNotFoundException("Gym not found.");
+            }
+
+            var role = request.Role.ToUpperInvariant();
+            if (role != AppRoles.Staff)
+            {
+                throw new InvalidOperationException("Owners can only create STAFF users.");
+            }
+
+            var user = new User
+            {
+                GymId = gymId,
+                FullName = request.FullName.Trim(),
+                Email = normalizedEmail,
+                Phone = request.Phone?.Trim(),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                Role = role,
+                IsActive = true
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Owner-created staff user: {UserId}", user.Id);
             return MapUser(user);
         }
 

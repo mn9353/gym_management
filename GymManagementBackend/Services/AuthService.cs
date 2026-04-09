@@ -41,6 +41,7 @@ namespace GymManagementBackend.Services
             var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
             var user = await _context.Users
+                .Include(u => u.Gym)
                 .FirstOrDefaultAsync(u => EF.Functions.ILike(u.Email, normalizedEmail));
 
             if (user is null || !user.IsActive || !VerifyPassword(request.Password, user.PasswordHash))
@@ -135,7 +136,9 @@ namespace GymManagementBackend.Services
 
         public async Task<UserDto?> GetByIdAsync(Guid userId)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+            var user = await _context.Users
+                .Include(u => u.Gym)
+                .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
             return user is null ? null : MapUserToDto(user);
         }
 
@@ -168,6 +171,7 @@ namespace GymManagementBackend.Services
             {
                 Id = user.Id,
                 GymId = user.GymId,
+                GymName = user.Gym?.GymName,
                 FullName = user.FullName,
                 Email = user.Email,
                 Phone = user.Phone,
