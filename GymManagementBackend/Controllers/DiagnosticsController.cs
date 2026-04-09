@@ -8,6 +8,7 @@ namespace GymManagementBackend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Policy = "AdminOnly")]
     public class DiagnosticsController : ControllerBase
     {
         private readonly GymDbContext _context;
@@ -20,7 +21,6 @@ namespace GymManagementBackend.Controllers
         }
 
         [HttpGet("db")]
-        [AllowAnonymous]
         public async Task<IActionResult> CheckDatabaseConnection()
         {
             try
@@ -69,7 +69,6 @@ namespace GymManagementBackend.Controllers
         }
 
         [HttpGet("db-debug")]
-        [AllowAnonymous]
         public async Task<IActionResult> CheckDatabaseConnectionDetailed()
         {
             try
