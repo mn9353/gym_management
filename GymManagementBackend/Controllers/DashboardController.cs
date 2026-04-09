@@ -118,5 +118,25 @@ namespace GymManagementBackend.Controllers
             }
             return gymId.Value;
         }
+
+        [HttpGet("revenue-trends")]
+        public async Task<IActionResult> GetRevenueTrends([FromQuery] int months = 6, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var trends = await _dashboardService.GetMonthlyRevenueTrendAsync(effectiveGymId, months);
+                return Ok(trends);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting revenue trends: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting revenue trends" });
+            }
+        }
     }
 }

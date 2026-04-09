@@ -9,6 +9,7 @@ namespace GymManagementBackend.Services
         Task<DashboardDto> GetDashboardDataAsync(Guid gymId);
         Task<DashboardStatsDto> GetDashboardStatsAsync(Guid gymId);
         Task<List<MonthlyJoinTrendDto>> GetMonthlyJoinTrendAsync(Guid gymId, int months = 6);
+        Task<List<MonthlyRevenueTrendDto>> GetMonthlyRevenueTrendAsync(Guid gymId, int months = 6);
         Task<List<RecentMemberDto>> GetRecentMembersAsync(Guid gymId, int limit = 5);
     }
 
@@ -133,6 +134,42 @@ namespace GymManagementBackend.Services
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting monthly join trend: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<List<MonthlyRevenueTrendDto>> GetMonthlyRevenueTrendAsync(Guid gymId, int months = 6)
+        {
+            try
+            {
+                months = Math.Clamp(months, 1, 24);
+                var trends = new List<MonthlyRevenueTrendDto>();
+
+                for (int i = months - 1; i >= 0; i--)
+                {
+                    var month = DateTime.UtcNow.AddMonths(-i);
+                    var monthStart = new DateTime(month.Year, month.Month, 1);
+                    var monthEnd = monthStart.AddMonths(1);
+
+                    var revenue = (await _context.Payments
+                        .Where(p => p.GymId == gymId
+                                    && p.PaymentDate >= DateOnly.FromDateTime(monthStart)
+                                    && p.PaymentDate < DateOnly.FromDateTime(monthEnd))
+                        .Select(p => (decimal?)p.Amount)
+                        .SumAsync()) ?? 0m;
+
+                    trends.Add(new MonthlyRevenueTrendDto
+                    {
+                        Month = monthStart.ToString("MMM yyyy"),
+                        Revenue = revenue
+                    });
+                }
+
+                return trends;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting monthly revenue trend: {ex.Message}");
                 throw;
             }
         }

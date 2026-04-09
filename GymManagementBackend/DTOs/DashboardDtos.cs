@@ -16,6 +16,12 @@ namespace GymManagementBackend.DTOs
         public int JoinCount { get; set; }
     }
 
+    public class MonthlyRevenueTrendDto
+    {
+        public string Month { get; set; } = string.Empty;
+        public decimal Revenue { get; set; }
+    }
+
     public class RecentMemberDto
     {
         public Guid Id { get; set; }
