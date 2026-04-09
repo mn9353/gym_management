@@ -153,6 +153,25 @@ app.UseCors("AppCors");
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapGet("/", () =>
+{
+    return Results.Ok(new
+    {
+        service = "GymManagementBackend",
+        status = "running",
+        timestamp = DateTime.UtcNow
+    });
+});
+
+app.MapGet("/health", () =>
+{
+    return Results.Ok(new
+    {
+        status = "healthy",
+        timestamp = DateTime.UtcNow
+    });
+});
+
 app.MapControllers();
 app.Run();
 
