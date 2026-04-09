@@ -2,6 +2,7 @@ using GymManagementBackend.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GymManagementBackend.Controllers
 {
@@ -63,6 +64,62 @@ namespace GymManagementBackend.Controllers
                     message = "Database diagnostics failed",
                     errorType = ex.GetType().Name,
                     timestamp = DateTime.UtcNow
+                });
+            }
+        }
+
+        [HttpGet("db-debug")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CheckDatabaseConnectionDetailed()
+        {
+            try
+            {
+                await using var connection = _context.Database.GetDbConnection();
+                await connection.OpenAsync();
+
+                await using var command = connection.CreateCommand();
+                command.CommandText = "SELECT 1";
+                var scalar = await command.ExecuteScalarAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Database connection and query succeeded",
+                    timestamp = DateTime.UtcNow,
+                    result = scalar?.ToString()
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Detailed database diagnostics endpoint failed.");
+
+                string? sqlState = null;
+                string? severity = null;
+                if (ex is PostgresException pg)
+                {
+                    sqlState = pg.SqlState;
+                    severity = pg.Severity;
+                }
+                else if (ex.InnerException is PostgresException innerPg)
+                {
+                    sqlState = innerPg.SqlState;
+                    severity = innerPg.Severity;
+                }
+
+                return StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    success = false,
+                    message = "Detailed database diagnostics failed",
+                    timestamp = DateTime.UtcNow,
+                    error = new
+                    {
+                        type = ex.GetType().FullName,
+                        message = ex.Message,
+                        innerType = ex.InnerException?.GetType().FullName,
+                        innerMessage = ex.InnerException?.Message,
+                        sqlState,
+                        severity
+                    }
                 });
             }
         }
