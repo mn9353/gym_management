@@ -33,6 +33,22 @@ dotnet ef database update
 dotnet run
 ```
 
+## Deploy On Render (Docker)
+1. Create a `Web Service` and select `Docker` runtime.
+2. Keep Dockerfile path as `Dockerfile` (repo root).
+3. Add these environment variables in Render:
+```text
+ASPNETCORE_ENVIRONMENT=Production
+ConnectionStrings__DefaultConnection=Host=aws-1-ap-southeast-1.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.<your-project-ref>;Password=<your-db-password>;SSL Mode=Require;Trust Server Certificate=true
+Jwt__Secret=<at-least-32-char-random-secret>
+Jwt__Issuer=GymManagementAPI
+Jwt__Audience=GymManagementApp
+Jwt__ExpirationMinutes=60
+Jwt__RefreshTokenExpirationDays=7
+Cors__AllowedOrigins__0=https://<your-frontend>.vercel.app
+```
+4. Do not add DB/JWT secrets into `appsettings.json`; keep them only in Render env vars.
+
 ## Auth Endpoints
 - `POST /api/auth/login`
 - `POST /api/auth/refresh-token`

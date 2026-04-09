@@ -1,0 +1,9 @@
+**/.git
+**/.vs
+**/bin
+**/obj
+**/*.user
+**/*.suo
+**/*.log
+**/node_modules
+GymManagementBackend/appsettings.Local.json
