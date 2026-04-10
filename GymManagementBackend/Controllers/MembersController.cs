@@ -162,6 +162,29 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpGet("upcoming-renewals")]
+        public async Task<IActionResult> GetUpcomingRenewals(
+            [FromQuery] int days = 7,
+            [FromQuery] int limit = 100,
+            [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var members = await _memberService.GetUpcomingRenewalsAsync(effectiveGymId, days, limit);
+                return Ok(members);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting upcoming renewals: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting upcoming renewals" });
+            }
+        }
+
         private Guid ResolveGymId(Guid? requestedGymId)
         {
             if (User.IsAdmin())

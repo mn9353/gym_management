@@ -13,6 +13,7 @@ namespace GymManagementBackend.Services
         Task<MemberDto> GetMemberAsync(Guid gymId, Guid memberId);
         Task<List<MemberDto>> GetMembersAsync(Guid gymId, int pageNumber = 1, int pageSize = 10);
         Task<List<MemberDto>> SearchMembersAsync(Guid gymId, MemberSearchDto searchDto);
+        Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100);
     }
 
     public class MemberService : IMemberService
@@ -276,6 +277,32 @@ namespace GymManagementBackend.Services
                 CreatedAt = member.CreatedAt,
                 UpdatedAt = member.UpdatedAt
             };
+        }
+
+        public async Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100)
+        {
+            try
+            {
+                days = Math.Clamp(days, 1, 90);
+                limit = Math.Clamp(limit, 1, 500);
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var endDate = today.AddDays(days);
+
+                return await _context.Members
+                    .Where(m => m.GymId == gymId
+                                && m.PlanEndDate >= today
+                                && m.PlanEndDate <= endDate
+                                && m.Status != "PAUSED")
+                    .OrderBy(m => m.PlanEndDate)
+                    .Take(limit)
+                    .Select(m => MapMemberToDto(m))
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting upcoming renewals: {ex.Message}");
+                throw;
+            }
         }
 
         private static void ValidateMembershipDates(DateOnly planStartDate, DateOnly planEndDate)
