@@ -305,6 +305,7 @@ namespace GymManagementBackend.Services
                         Phone = m.Phone,
                         Gender = m.Gender,
                         JoinDate = m.JoinDate,
+                        PlanStartDate = m.PlanStartDate,
                         PlanEndDate = m.PlanEndDate,
                         Status = m.Status,
                         PaymentStatus = m.PaymentStatus,
@@ -469,6 +470,26 @@ namespace GymManagementBackend.Services
                 query = query.Where(m => m.JoinDate <= filters.JoinDateTo.Value);
             }
 
+            if (filters.PlanStartDate.HasValue)
+            {
+                query = query.Where(m => m.PlanStartDate == filters.PlanStartDate.Value);
+            }
+
+            if (filters.PlanStartDateFrom.HasValue)
+            {
+                query = query.Where(m => m.PlanStartDate >= filters.PlanStartDateFrom.Value);
+            }
+
+            if (filters.PlanStartDateTo.HasValue)
+            {
+                query = query.Where(m => m.PlanStartDate <= filters.PlanStartDateTo.Value);
+            }
+
+            if (filters.PlanEndDate.HasValue)
+            {
+                query = query.Where(m => m.PlanEndDate == filters.PlanEndDate.Value);
+            }
+
             if (filters.PlanEndDateFrom.HasValue)
             {
                 query = query.Where(m => m.PlanEndDate >= filters.PlanEndDateFrom.Value);
@@ -505,6 +526,8 @@ namespace GymManagementBackend.Services
                 ("phone", true) => query.OrderByDescending(m => m.Phone).ThenBy(m => m.Id),
                 ("joindate", false) => query.OrderBy(m => m.JoinDate).ThenBy(m => m.Id),
                 ("joindate", true) => query.OrderByDescending(m => m.JoinDate).ThenBy(m => m.Id),
+                ("planstartdate", false) => query.OrderBy(m => m.PlanStartDate).ThenBy(m => m.Id),
+                ("planstartdate", true) => query.OrderByDescending(m => m.PlanStartDate).ThenBy(m => m.Id),
                 ("amountpaid", false) => query.OrderBy(m => m.AmountPaid).ThenBy(m => m.Id),
                 ("amountpaid", true) => query.OrderByDescending(m => m.AmountPaid).ThenBy(m => m.Id),
                 ("status", false) => query.OrderBy(m => m.Status).ThenBy(m => m.Id),

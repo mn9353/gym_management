@@ -148,6 +148,10 @@ namespace GymManagementBackend.DTOs
 
         public DateOnly? JoinDateFrom { get; set; }
         public DateOnly? JoinDateTo { get; set; }
+        public DateOnly? PlanStartDate { get; set; }
+        public DateOnly? PlanStartDateFrom { get; set; }
+        public DateOnly? PlanStartDateTo { get; set; }
+        public DateOnly? PlanEndDate { get; set; }
         public DateOnly? PlanEndDateFrom { get; set; }
         public DateOnly? PlanEndDateTo { get; set; }
         public decimal? AmountPaidMin { get; set; }
@@ -161,6 +165,7 @@ namespace GymManagementBackend.DTOs
         public string? Phone { get; set; }
         public string? Gender { get; set; }
         public DateOnly JoinDate { get; set; }
+        public DateOnly PlanStartDate { get; set; }
         public DateOnly PlanEndDate { get; set; }
         public string Status { get; set; } = string.Empty;
         public string PaymentStatus { get; set; } = string.Empty;
