@@ -196,12 +196,12 @@ namespace GymManagementBackend.Services
                                          && m.JoinDate >= monthStartDate
                                          && m.JoinDate < monthEndDate);
 
-                    // Count inactive members for the month using both status and plan-end date signals.
+                    // Count inactive members strictly by plan-end month.
+                    // If a membership ended in this month, it contributes to this month's inactive flow.
                     var inactiveMembers = await _context.Members
                         .CountAsync(m => m.GymId == gymId
                                          && m.PlanEndDate >= monthStartDate
-                                         && m.PlanEndDate < monthEndDate
-                                         && (m.Status == "EXPIRED" || m.PlanEndDate < today));
+                                         && m.PlanEndDate < monthEndDate);
 
                     flow.Add(new MonthlyMemberFlowDto
                     {
