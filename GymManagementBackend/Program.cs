@@ -91,9 +91,46 @@ var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AppCors", policy =>
-        policy.AllowAnyOrigin()
+    {
+        var normalizedOrigins = allowedOrigins
+            .Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Select(origin => origin.Trim())
+            .ToArray();
+
+        var hasWildcard = normalizedOrigins.Any(origin => origin == "*");
+
+        if (hasWildcard)
+        {
+            if (!builder.Environment.IsDevelopment())
+            {
+                throw new InvalidOperationException(
+                    "Cors:AllowedOrigins cannot contain '*' outside Development. Configure explicit frontend origin(s).");
+            }
+
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+            return;
+        }
+
+        if (normalizedOrigins.Length == 0)
+        {
+            if (!builder.Environment.IsDevelopment())
+            {
+                throw new InvalidOperationException(
+                    "Cors:AllowedOrigins must include at least one explicit origin in non-development environments.");
+            }
+
+            policy.WithOrigins("http://localhost:4200")
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+            return;
+        }
+
+        policy.WithOrigins(normalizedOrigins)
               .AllowAnyMethod()
-              .AllowAnyHeader());
+              .AllowAnyHeader();
+    });
 });
 
 builder.Services.AddScoped<JwtTokenUtil>();
