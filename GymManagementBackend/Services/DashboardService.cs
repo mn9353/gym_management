@@ -180,34 +180,56 @@ namespace GymManagementBackend.Services
             try
             {
                 months = Math.Clamp(months, 1, 24);
-                var flow = new List<MonthlyMemberFlowDto>();
-                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var flow = new List<MonthlyMemberFlowDto>(months);
+                var connection = _context.Database.GetDbConnection();
 
-                for (int i = months - 1; i >= 0; i--)
+                if (connection.State != System.Data.ConnectionState.Open)
                 {
-                    var month = DateTime.UtcNow.AddMonths(-i);
-                    var monthStart = new DateTime(month.Year, month.Month, 1);
-                    var monthEnd = monthStart.AddMonths(1);
-                    var monthStartDate = DateOnly.FromDateTime(monthStart);
-                    var monthEndDate = DateOnly.FromDateTime(monthEnd);
+                    await connection.OpenAsync();
+                }
 
-                    var newJoinees = await _context.Members
-                        .CountAsync(m => m.GymId == gymId
-                                         && m.JoinDate >= monthStartDate
-                                         && m.JoinDate < monthEndDate);
+                await using var command = connection.CreateCommand();
+                command.CommandText = @"
+WITH months AS (
+    SELECT generate_series(
+        date_trunc('month', CURRENT_DATE) - ((@months - 1) * INTERVAL '1 month'),
+        date_trunc('month', CURRENT_DATE),
+        INTERVAL '1 month'
+    )::date AS month_start
+)
+SELECT
+    to_char(m.month_start, 'Mon YYYY') AS month,
+    COUNT(mem.id) FILTER (
+        WHERE mem.join_date >= m.month_start
+          AND mem.join_date < (m.month_start + INTERVAL '1 month')::date
+    ) AS new_joinees,
+    COUNT(mem.id) FILTER (
+        WHERE mem.plan_end_date >= m.month_start
+          AND mem.plan_end_date < (m.month_start + INTERVAL '1 month')::date
+    ) AS inactive_members
+FROM months m
+LEFT JOIN members mem ON mem.gym_id = @gymId
+GROUP BY m.month_start
+ORDER BY m.month_start;";
 
-                    // Count inactive members strictly by plan-end month.
-                    // If a membership ended in this month, it contributes to this month's inactive flow.
-                    var inactiveMembers = await _context.Members
-                        .CountAsync(m => m.GymId == gymId
-                                         && m.PlanEndDate >= monthStartDate
-                                         && m.PlanEndDate < monthEndDate);
+                var gymIdParam = command.CreateParameter();
+                gymIdParam.ParameterName = "@gymId";
+                gymIdParam.Value = gymId;
+                command.Parameters.Add(gymIdParam);
 
+                var monthsParam = command.CreateParameter();
+                monthsParam.ParameterName = "@months";
+                monthsParam.Value = months;
+                command.Parameters.Add(monthsParam);
+
+                await using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
                     flow.Add(new MonthlyMemberFlowDto
                     {
-                        Month = monthStart.ToString("MMM yyyy"),
-                        NewJoinees = newJoinees,
-                        InactiveMembers = inactiveMembers
+                        Month = reader.GetString(0),
+                        NewJoinees = Convert.ToInt32(reader.GetInt64(1)),
+                        InactiveMembers = Convert.ToInt32(reader.GetInt64(2))
                     });
                 }
 
