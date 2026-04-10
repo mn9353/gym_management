@@ -14,6 +14,7 @@ namespace GymManagementBackend.Services
         Task<List<MemberDto>> GetMembersAsync(Guid gymId, int pageNumber = 1, int pageSize = 10);
         Task<List<MemberDto>> SearchMembersAsync(Guid gymId, MemberSearchDto searchDto);
         Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100);
+        Task<PagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment);
     }
 
     public class MemberService : IMemberService
@@ -279,6 +280,57 @@ namespace GymManagementBackend.Services
             };
         }
 
+        public async Task<PagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment)
+        {
+            try
+            {
+                var normalized = NormalizeQuery(queryDto);
+                var query = _context.Members
+                    .AsNoTracking()
+                    .Where(m => m.GymId == gymId);
+
+                query = ApplySegmentFilter(query, normalized, segment);
+                query = ApplyCommonFilters(query, normalized);
+
+                var totalCount = await query.CountAsync();
+                query = ApplySorting(query, normalized.SortBy, normalized.SortDirection);
+
+                var items = await query
+                    .Skip((normalized.PageNumber - 1) * normalized.PageSize)
+                    .Take(normalized.PageSize)
+                    .Select(m => new MemberListItemDto
+                    {
+                        Id = m.Id,
+                        FullName = m.FullName,
+                        Phone = m.Phone,
+                        Gender = m.Gender,
+                        JoinDate = m.JoinDate,
+                        PlanEndDate = m.PlanEndDate,
+                        Status = m.Status,
+                        PaymentStatus = m.PaymentStatus,
+                        MembershipType = m.MembershipType,
+                        TrainerAssigned = m.TrainerAssigned,
+                        AmountPaid = normalized.IncludeAmount ? m.AmountPaid : null
+                    })
+                    .ToListAsync();
+
+                var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)normalized.PageSize));
+                return new PagedResponseDto<MemberListItemDto>
+                {
+                    Items = items,
+                    PageNumber = normalized.PageNumber,
+                    PageSize = normalized.PageSize,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting members list for segment {segment}: {ex.Message}");
+                throw;
+            }
+        }
+
         public async Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100)
         {
             try
@@ -303,6 +355,163 @@ namespace GymManagementBackend.Services
                 _logger.LogError($"Error getting upcoming renewals: {ex.Message}");
                 throw;
             }
+        }
+
+        private static MemberListQueryDto NormalizeQuery(MemberListQueryDto query)
+        {
+            query.PageNumber = Math.Max(1, query.PageNumber);
+            query.PageSize = Math.Clamp(query.PageSize, 5, 200);
+            query.UpcomingDays = Math.Clamp(query.UpcomingDays, 1, 90);
+            query.SortBy = string.IsNullOrWhiteSpace(query.SortBy) ? "planEndDate" : query.SortBy.Trim();
+            query.SortDirection = string.Equals(query.SortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "desc" : "asc";
+            query.Gender = NormalizeGender(query.Gender);
+            return query;
+        }
+
+        private static string? NormalizeGender(string? gender)
+        {
+            if (string.IsNullOrWhiteSpace(gender))
+            {
+                return null;
+            }
+
+            var g = gender.Trim().ToUpperInvariant();
+            return g switch
+            {
+                "M" => "MALE",
+                "F" => "FEMALE",
+                _ => g
+            };
+        }
+
+        private static IQueryable<Member> ApplySegmentFilter(
+            IQueryable<Member> query,
+            MemberListQueryDto filters,
+            string segment)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var normalizedSegment = (segment ?? string.Empty).Trim().ToLowerInvariant();
+
+            return normalizedSegment switch
+            {
+                "active" => query.Where(m => m.Status == "ACTIVE"),
+                "inactive" => query.Where(m => m.Status == "EXPIRED"),
+                "upcoming" => query.Where(m =>
+                    m.PlanEndDate >= today
+                    && m.PlanEndDate <= today.AddDays(filters.UpcomingDays)
+                    && m.Status != "PAUSED"),
+                _ => query
+            };
+        }
+
+        private static IQueryable<Member> ApplyCommonFilters(IQueryable<Member> query, MemberListQueryDto filters)
+        {
+            if (!string.IsNullOrWhiteSpace(filters.SearchTerm))
+            {
+                var term = filters.SearchTerm.Trim();
+                query = query.Where(m =>
+                    EF.Functions.ILike(m.FullName, $"%{term}%")
+                    || (m.Phone != null && EF.Functions.ILike(m.Phone, $"%{term}%"))
+                    || (m.MembershipType != null && EF.Functions.ILike(m.MembershipType, $"%{term}%"))
+                    || (m.TrainerAssigned != null && EF.Functions.ILike(m.TrainerAssigned, $"%{term}%"))
+                    || (m.LeadSource != null && EF.Functions.ILike(m.LeadSource, $"%{term}%")));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.FullName))
+            {
+                var fullName = filters.FullName.Trim();
+                query = query.Where(m => EF.Functions.ILike(m.FullName, $"%{fullName}%"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.Phone))
+            {
+                var phone = filters.Phone.Trim();
+                query = query.Where(m => m.Phone != null && EF.Functions.ILike(m.Phone, $"%{phone}%"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.Gender))
+            {
+                var gender = filters.Gender.Trim().ToUpperInvariant();
+                query = query.Where(m => m.Gender != null && m.Gender.ToUpper() == gender);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.PaymentStatus))
+            {
+                var paymentStatus = filters.PaymentStatus.Trim().ToUpperInvariant();
+                query = query.Where(m => m.PaymentStatus.ToUpper() == paymentStatus);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.MembershipType))
+            {
+                var membershipType = filters.MembershipType.Trim();
+                query = query.Where(m => m.MembershipType != null && EF.Functions.ILike(m.MembershipType, $"%{membershipType}%"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.TrainerAssigned))
+            {
+                var trainer = filters.TrainerAssigned.Trim();
+                query = query.Where(m => m.TrainerAssigned != null && EF.Functions.ILike(m.TrainerAssigned, $"%{trainer}%"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.LeadSource))
+            {
+                var leadSource = filters.LeadSource.Trim();
+                query = query.Where(m => m.LeadSource != null && EF.Functions.ILike(m.LeadSource, $"%{leadSource}%"));
+            }
+
+            if (filters.JoinDateFrom.HasValue)
+            {
+                query = query.Where(m => m.JoinDate >= filters.JoinDateFrom.Value);
+            }
+
+            if (filters.JoinDateTo.HasValue)
+            {
+                query = query.Where(m => m.JoinDate <= filters.JoinDateTo.Value);
+            }
+
+            if (filters.PlanEndDateFrom.HasValue)
+            {
+                query = query.Where(m => m.PlanEndDate >= filters.PlanEndDateFrom.Value);
+            }
+
+            if (filters.PlanEndDateTo.HasValue)
+            {
+                query = query.Where(m => m.PlanEndDate <= filters.PlanEndDateTo.Value);
+            }
+
+            if (filters.AmountPaidMin.HasValue)
+            {
+                query = query.Where(m => m.AmountPaid.HasValue && m.AmountPaid.Value >= filters.AmountPaidMin.Value);
+            }
+
+            if (filters.AmountPaidMax.HasValue)
+            {
+                query = query.Where(m => m.AmountPaid.HasValue && m.AmountPaid.Value <= filters.AmountPaidMax.Value);
+            }
+
+            return query;
+        }
+
+        private static IQueryable<Member> ApplySorting(IQueryable<Member> query, string sortBy, string sortDirection)
+        {
+            var isDesc = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+            var field = sortBy.Trim().ToLowerInvariant();
+
+            return (field, isDesc) switch
+            {
+                ("name", false) => query.OrderBy(m => m.FullName).ThenBy(m => m.Id),
+                ("name", true) => query.OrderByDescending(m => m.FullName).ThenBy(m => m.Id),
+                ("phone", false) => query.OrderBy(m => m.Phone).ThenBy(m => m.Id),
+                ("phone", true) => query.OrderByDescending(m => m.Phone).ThenBy(m => m.Id),
+                ("joindate", false) => query.OrderBy(m => m.JoinDate).ThenBy(m => m.Id),
+                ("joindate", true) => query.OrderByDescending(m => m.JoinDate).ThenBy(m => m.Id),
+                ("amountpaid", false) => query.OrderBy(m => m.AmountPaid).ThenBy(m => m.Id),
+                ("amountpaid", true) => query.OrderByDescending(m => m.AmountPaid).ThenBy(m => m.Id),
+                ("status", false) => query.OrderBy(m => m.Status).ThenBy(m => m.Id),
+                ("status", true) => query.OrderByDescending(m => m.Status).ThenBy(m => m.Id),
+                ("planenddate", true) => query.OrderByDescending(m => m.PlanEndDate).ThenBy(m => m.Id),
+                _ => query.OrderBy(m => m.PlanEndDate).ThenBy(m => m.Id)
+            };
         }
 
         private static void ValidateMembershipDates(DateOnly planStartDate, DateOnly planEndDate)

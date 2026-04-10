@@ -185,6 +185,66 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpGet("active/list")]
+        public async Task<IActionResult> GetActiveMembersList([FromQuery] MemberListQueryDto queryDto, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.GetMembersListAsync(effectiveGymId, queryDto, "active");
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting active members list: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting active members list" });
+            }
+        }
+
+        [HttpGet("inactive/list")]
+        public async Task<IActionResult> GetInactiveMembersList([FromQuery] MemberListQueryDto queryDto, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.GetMembersListAsync(effectiveGymId, queryDto, "inactive");
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting inactive members list: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting inactive members list" });
+            }
+        }
+
+        [HttpGet("upcoming-renewals/list")]
+        public async Task<IActionResult> GetUpcomingRenewalsList([FromQuery] MemberListQueryDto queryDto, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.GetMembersListAsync(effectiveGymId, queryDto, "upcoming");
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting upcoming renewals list: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting upcoming renewals list" });
+            }
+        }
+
         private Guid ResolveGymId(Guid? requestedGymId)
         {
             if (User.IsAdmin())
