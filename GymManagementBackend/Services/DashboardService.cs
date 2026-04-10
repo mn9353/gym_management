@@ -10,6 +10,7 @@ namespace GymManagementBackend.Services
         Task<DashboardStatsDto> GetDashboardStatsAsync(Guid gymId);
         Task<List<MonthlyJoinTrendDto>> GetMonthlyJoinTrendAsync(Guid gymId, int months = 6);
         Task<List<MonthlyRevenueTrendDto>> GetMonthlyRevenueTrendAsync(Guid gymId, int months = 6);
+        Task<List<MonthlyMemberFlowDto>> GetMonthlyMemberFlowAsync(Guid gymId, int months = 6);
         Task<List<RecentMemberDto>> GetRecentMembersAsync(Guid gymId, int limit = 5);
     }
 
@@ -170,6 +171,51 @@ namespace GymManagementBackend.Services
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting monthly revenue trend: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<List<MonthlyMemberFlowDto>> GetMonthlyMemberFlowAsync(Guid gymId, int months = 6)
+        {
+            try
+            {
+                months = Math.Clamp(months, 1, 24);
+                var flow = new List<MonthlyMemberFlowDto>();
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+                for (int i = months - 1; i >= 0; i--)
+                {
+                    var month = DateTime.UtcNow.AddMonths(-i);
+                    var monthStart = new DateTime(month.Year, month.Month, 1);
+                    var monthEnd = monthStart.AddMonths(1);
+                    var monthStartDate = DateOnly.FromDateTime(monthStart);
+                    var monthEndDate = DateOnly.FromDateTime(monthEnd);
+
+                    var newJoinees = await _context.Members
+                        .CountAsync(m => m.GymId == gymId
+                                         && m.JoinDate >= monthStartDate
+                                         && m.JoinDate < monthEndDate);
+
+                    // Count members whose plans ended in this month and are already past due.
+                    var inactiveMembers = await _context.Members
+                        .CountAsync(m => m.GymId == gymId
+                                         && m.PlanEndDate >= monthStartDate
+                                         && m.PlanEndDate < monthEndDate
+                                         && m.PlanEndDate < today);
+
+                    flow.Add(new MonthlyMemberFlowDto
+                    {
+                        Month = monthStart.ToString("MMM yyyy"),
+                        NewJoinees = newJoinees,
+                        InactiveMembers = inactiveMembers
+                    });
+                }
+
+                return flow;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting monthly member flow: {ex.Message}");
                 throw;
             }
         }

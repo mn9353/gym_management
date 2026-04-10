@@ -138,5 +138,25 @@ namespace GymManagementBackend.Controllers
                 return StatusCode(500, new { message = "Error getting revenue trends" });
             }
         }
+
+        [HttpGet("member-flow")]
+        public async Task<IActionResult> GetMemberFlow([FromQuery] int months = 6, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var flow = await _dashboardService.GetMonthlyMemberFlowAsync(effectiveGymId, months);
+                return Ok(flow);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting member flow: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting member flow" });
+            }
+        }
     }
 }
