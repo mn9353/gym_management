@@ -40,6 +40,7 @@ namespace GymManagementBackend.DTOs
         public string? Phone { get; set; }
         public string? ProfileImageUrl { get; set; }
         public DateOnly JoinDate { get; set; }
+        public DateOnly PlanStartDate { get; set; }
         public DateOnly PlanEndDate { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? MembershipType { get; set; }

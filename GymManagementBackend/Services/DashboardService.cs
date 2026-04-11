@@ -286,6 +286,7 @@ ORDER BY m.month_start;";
                         Phone = m.Phone,
                         ProfileImageUrl = m.ProfileImageUrl,
                         JoinDate = m.JoinDate,
+                        PlanStartDate = m.PlanStartDate,
                         PlanEndDate = m.PlanEndDate,
                         Status = m.Status,
                         MembershipType = m.MembershipType,
