@@ -97,7 +97,7 @@ namespace GymManagementBackend.DTOs
     public class OwnerPaymentUpdateDto
     {
         [Range(typeof(decimal), "0.01", "9999999999")]
-        public decimal NewAmountPaidTotal { get; set; }
+        public decimal AmountPaidNow { get; set; }
 
         public DateOnly? PaymentDate { get; set; }
 

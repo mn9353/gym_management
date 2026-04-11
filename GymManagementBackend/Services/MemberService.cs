@@ -275,22 +275,27 @@ namespace GymManagementBackend.Services
                 }
 
                 var currentPaid = member.AmountPaid ?? 0m;
-                var nextPaid = decimal.Round(ownerPaymentUpdateDto.NewAmountPaidTotal, 2, MidpointRounding.AwayFromZero);
-                if (nextPaid <= currentPaid)
+                var amountPaidNow = decimal.Round(ownerPaymentUpdateDto.AmountPaidNow, 2, MidpointRounding.AwayFromZero);
+                if (amountPaidNow <= 0m)
                 {
-                    throw new InvalidOperationException("New amount paid must be greater than current amount paid.");
+                    throw new InvalidOperationException("Amount paid now must be greater than zero.");
                 }
 
-                var amountReceivedNow = nextPaid - currentPaid;
+                var nextPaid = currentPaid + amountPaidNow;
                 var paymentDate = ownerPaymentUpdateDto.PaymentDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
                 var paymentMode = NormalizePaymentMode(ownerPaymentUpdateDto.PaymentMode);
                 var amountToPay = member.AmountToPay ?? 0m;
+                if (amountToPay > 0m && nextPaid > amountToPay)
+                {
+                    var remaining = Math.Max(0m, amountToPay - currentPaid);
+                    throw new InvalidOperationException($"Overpayment not allowed. Remaining amount is {remaining:0.##}.");
+                }
 
                 var payment = new Payment
                 {
                     GymId = gymId,
                     MemberId = member.Id,
-                    Amount = amountReceivedNow,
+                    Amount = amountPaidNow,
                     PaymentDate = paymentDate,
                     PaymentMode = paymentMode,
                     Remarks = ownerPaymentUpdateDto.Remarks?.Trim()
@@ -362,6 +367,10 @@ namespace GymManagementBackend.Services
                 if (amountPaidNow < 0m)
                 {
                     throw new InvalidOperationException("Amount paid now cannot be negative.");
+                }
+                if (amountPaidNow > amountToPayIncrement)
+                {
+                    throw new InvalidOperationException($"Overpayment not allowed. For this renewal, maximum payable is {amountToPayIncrement:0.##}.");
                 }
 
                 var paymentDate = ownerRenewMemberDto.PaymentDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
