@@ -3,6 +3,7 @@ using GymManagementBackend.DTOs;
 using GymManagementBackend.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Linq.Expressions;
 
 namespace GymManagementBackend.Services
 {
@@ -23,6 +24,33 @@ namespace GymManagementBackend.Services
     {
         private readonly GymDbContext _context;
         private readonly ILogger<MemberService> _logger;
+        private static readonly Expression<Func<Member, MemberDto>> MemberToDtoProjection = m => new MemberDto
+        {
+            Id = m.Id,
+            GymId = m.GymId,
+            FullName = m.FullName,
+            Phone = m.Phone,
+            Gender = m.Gender,
+            DateOfBirth = m.DateOfBirth,
+            JoinDate = m.JoinDate,
+            PlanStartDate = m.PlanStartDate,
+            PlanEndDate = m.PlanEndDate,
+            LastPaymentDate = m.LastPaymentDate,
+            MembershipType = m.MembershipType,
+            AmountPaid = m.AmountPaid,
+            PaymentStatus = m.PaymentStatus,
+            Status = m.Status,
+            Notes = m.Notes,
+            EmergencyContact = m.EmergencyContact,
+            Height = m.Height,
+            Weight = m.Weight,
+            FitnessGoal = m.FitnessGoal,
+            TrainerAssigned = m.TrainerAssigned,
+            LeadSource = m.LeadSource,
+            ProfileImageUrl = m.ProfileImageUrl,
+            CreatedAt = m.CreatedAt,
+            UpdatedAt = m.UpdatedAt
+        };
 
         public MemberService(GymDbContext context, ILogger<MemberService> logger)
         {
@@ -204,7 +232,7 @@ namespace GymManagementBackend.Services
                     .OrderByDescending(m => m.CreatedAt)
                     .Skip((pageNumber - 1) * pageSize)
                     .Take(pageSize)
-                    .Select(m => MapMemberToDto(m))
+                    .Select(MemberToDtoProjection)
                     .ToListAsync();
             }
             catch (Exception ex)
@@ -241,7 +269,7 @@ namespace GymManagementBackend.Services
                     .OrderByDescending(m => m.CreatedAt)
                     .Skip((Math.Max(1, searchDto.PageNumber) - 1) * Math.Clamp(searchDto.PageSize, 1, 100))
                     .Take(Math.Clamp(searchDto.PageSize, 1, 100))
-                    .Select(m => MapMemberToDto(m))
+                    .Select(MemberToDtoProjection)
                     .ToListAsync();
             }
             catch (Exception ex)
@@ -350,7 +378,7 @@ namespace GymManagementBackend.Services
                                 && m.Status != "PAUSED")
                     .OrderBy(m => m.PlanEndDate)
                     .Take(limit)
-                    .Select(m => MapMemberToDto(m))
+                    .Select(MemberToDtoProjection)
                     .ToListAsync();
             }
             catch (Exception ex)
