@@ -166,12 +166,13 @@ namespace GymManagementBackend.Controllers
         public async Task<IActionResult> GetUpcomingRenewals(
             [FromQuery] int days = 7,
             [FromQuery] int limit = 100,
+            [FromQuery] int skip = 0,
             [FromQuery] Guid? gymId = null)
         {
             try
             {
                 var effectiveGymId = ResolveGymId(gymId);
-                var members = await _memberService.GetUpcomingRenewalsAsync(effectiveGymId, days, limit);
+                var members = await _memberService.GetUpcomingRenewalsAsync(effectiveGymId, days, limit, skip);
                 return Ok(members);
             }
             catch (UnauthorizedAccessException ex)

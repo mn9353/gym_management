@@ -15,7 +15,7 @@ namespace GymManagementBackend.Services
         Task<MemberDto> GetMemberAsync(Guid gymId, Guid memberId);
         Task<List<MemberDto>> GetMembersAsync(Guid gymId, int pageNumber = 1, int pageSize = 10);
         Task<List<MemberDto>> SearchMembersAsync(Guid gymId, MemberSearchDto searchDto);
-        Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100);
+        Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100, int skip = 0);
         Task<PagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment);
         Task<PagedResponseDto<MemberListItemDto>> GetMembersGridAsync(Guid gymId, MemberGridRequestDto request, string segment);
     }
@@ -363,12 +363,13 @@ namespace GymManagementBackend.Services
             }
         }
 
-        public async Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100)
+        public async Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100, int skip = 0)
         {
             try
             {
                 days = Math.Clamp(days, 1, 90);
                 limit = Math.Clamp(limit, 1, 500);
+                skip = Math.Max(0, skip);
                 var today = DateOnly.FromDateTime(DateTime.UtcNow);
                 var endDate = today.AddDays(days);
 
@@ -378,6 +379,7 @@ namespace GymManagementBackend.Services
                                 && m.PlanEndDate <= endDate
                                 && m.Status != "PAUSED")
                     .OrderBy(m => m.PlanEndDate)
+                    .Skip(skip)
                     .Take(limit)
                     .Select(MemberToDtoProjection)
                     .ToListAsync();
