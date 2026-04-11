@@ -185,6 +185,14 @@ namespace GymManagementBackend.DTOs
         public int TotalPages { get; set; }
     }
 
+    public class MemberSegmentCountsDto
+    {
+        public int All { get; set; }
+        public int Active { get; set; }
+        public int Expiring { get; set; }
+        public int Inactive { get; set; }
+    }
+
     public class MemberGridRequestDto
     {
         public Dictionary<string, JsonElement>? Filters { get; set; } = new();

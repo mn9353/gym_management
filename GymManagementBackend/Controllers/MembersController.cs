@@ -186,6 +186,28 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpGet("segment-counts")]
+        public async Task<IActionResult> GetSegmentCounts(
+            [FromQuery] int upcomingDays = 7,
+            [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var counts = await _memberService.GetSegmentCountsAsync(effectiveGymId, upcomingDays);
+                return Ok(counts);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting segment counts: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting segment counts" });
+            }
+        }
+
         [HttpGet("active/list")]
         public async Task<IActionResult> GetActiveMembersList([FromQuery] MemberListQueryDto queryDto, [FromQuery] Guid? gymId = null)
         {

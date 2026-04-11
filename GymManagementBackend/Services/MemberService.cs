@@ -16,6 +16,7 @@ namespace GymManagementBackend.Services
         Task<List<MemberDto>> GetMembersAsync(Guid gymId, int pageNumber = 1, int pageSize = 10);
         Task<List<MemberDto>> SearchMembersAsync(Guid gymId, MemberSearchDto searchDto);
         Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100, int skip = 0);
+        Task<MemberSegmentCountsDto> GetSegmentCountsAsync(Guid gymId, int upcomingDays = 7);
         Task<PagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment);
         Task<PagedResponseDto<MemberListItemDto>> GetMembersGridAsync(Guid gymId, MemberGridRequestDto request, string segment);
     }
@@ -387,6 +388,33 @@ namespace GymManagementBackend.Services
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting upcoming renewals: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<MemberSegmentCountsDto> GetSegmentCountsAsync(Guid gymId, int upcomingDays = 7)
+        {
+            try
+            {
+                upcomingDays = Math.Clamp(upcomingDays, 1, 90);
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var endDate = today.AddDays(upcomingDays);
+
+                var query = _context.Members
+                    .AsNoTracking()
+                    .Where(m => m.GymId == gymId && m.Status != "PAUSED");
+
+                return new MemberSegmentCountsDto
+                {
+                    All = await query.CountAsync(),
+                    Active = await query.CountAsync(m => m.Status == "ACTIVE"),
+                    Expiring = await query.CountAsync(m => m.PlanEndDate >= today && m.PlanEndDate <= endDate),
+                    Inactive = await query.CountAsync(m => m.Status == "EXPIRED")
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting segment counts: {ex.Message}");
                 throw;
             }
         }
