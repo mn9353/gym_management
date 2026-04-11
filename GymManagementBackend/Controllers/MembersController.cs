@@ -205,6 +205,35 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpGet("list")]
+        public async Task<IActionResult> GetMembersList(
+            [FromQuery] MemberListQueryDto queryDto,
+            [FromQuery] string segment = "all",
+            [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var normalized = (segment ?? "all").Trim().ToLowerInvariant();
+                if (normalized is not ("all" or "active" or "expiring" or "inactive"))
+                {
+                    normalized = "all";
+                }
+
+                var result = await _memberService.GetMembersListAsync(effectiveGymId, queryDto, normalized);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting members list: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting members list" });
+            }
+        }
+
         [HttpGet("inactive/list")]
         public async Task<IActionResult> GetInactiveMembersList([FromQuery] MemberListQueryDto queryDto, [FromQuery] Guid? gymId = null)
         {

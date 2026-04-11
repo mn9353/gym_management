@@ -333,6 +333,7 @@ namespace GymManagementBackend.Services
                         Id = m.Id,
                         FullName = m.FullName,
                         Phone = m.Phone,
+                        ProfileImageUrl = m.ProfileImageUrl,
                         Gender = m.Gender,
                         JoinDate = m.JoinDate,
                         PlanStartDate = m.PlanStartDate,
@@ -425,6 +426,7 @@ namespace GymManagementBackend.Services
                         Id = m.Id,
                         FullName = m.FullName,
                         Phone = m.Phone,
+                        ProfileImageUrl = m.ProfileImageUrl,
                         Gender = m.Gender,
                         JoinDate = m.JoinDate,
                         PlanStartDate = m.PlanStartDate,
@@ -493,6 +495,10 @@ namespace GymManagementBackend.Services
             {
                 "active" => query.Where(m => m.Status == "ACTIVE"),
                 "inactive" => query.Where(m => m.Status == "EXPIRED"),
+                "expiring" => query.Where(m =>
+                    m.PlanEndDate >= today
+                    && m.PlanEndDate <= today.AddDays(filters.UpcomingDays)
+                    && m.Status != "PAUSED"),
                 "upcoming" => query.Where(m =>
                     m.PlanEndDate >= today
                     && m.PlanEndDate <= today.AddDays(filters.UpcomingDays)
@@ -510,6 +516,7 @@ namespace GymManagementBackend.Services
                     EF.Functions.ILike(m.FullName, $"%{term}%")
                     || (m.Phone != null && EF.Functions.ILike(m.Phone, $"%{term}%"))
                     || (m.MembershipType != null && EF.Functions.ILike(m.MembershipType, $"%{term}%"))
+                    || EF.Functions.ILike(m.Status, $"%{term}%")
                     || (m.TrainerAssigned != null && EF.Functions.ILike(m.TrainerAssigned, $"%{term}%"))
                     || (m.LeadSource != null && EF.Functions.ILike(m.LeadSource, $"%{term}%")));
             }
@@ -641,6 +648,10 @@ namespace GymManagementBackend.Services
             {
                 "active" => query.Where(m => m.Status == "ACTIVE"),
                 "inactive" => query.Where(m => m.Status == "EXPIRED"),
+                "expiring" => query.Where(m =>
+                    m.PlanEndDate >= today
+                    && m.PlanEndDate <= today.AddDays(upcomingDays)
+                    && m.Status != "PAUSED"),
                 "upcoming" => query.Where(m =>
                     m.PlanEndDate >= today
                     && m.PlanEndDate <= today.AddDays(upcomingDays)

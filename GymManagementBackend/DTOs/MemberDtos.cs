@@ -164,6 +164,7 @@ namespace GymManagementBackend.DTOs
         public Guid Id { get; set; }
         public string FullName { get; set; } = string.Empty;
         public string? Phone { get; set; }
+        public string? ProfileImageUrl { get; set; }
         public string? Gender { get; set; }
         public DateOnly JoinDate { get; set; }
         public DateOnly PlanStartDate { get; set; }
