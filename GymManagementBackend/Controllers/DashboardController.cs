@@ -160,7 +160,7 @@ namespace GymManagementBackend.Controllers
         }
 
         [HttpGet("weekly-growth")]
-        public async Task<IActionResult> GetWeeklyGrowth([FromQuery] int weeks = 4, [FromQuery] Guid? gymId = null)
+        public async Task<IActionResult> GetWeeklyGrowth([FromQuery] int weeks = 0, [FromQuery] Guid? gymId = null)
         {
             try
             {

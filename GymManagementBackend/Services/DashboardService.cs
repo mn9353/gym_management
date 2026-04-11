@@ -304,10 +304,12 @@ ORDER BY m.month_start;";
         {
             try
             {
-                weeks = Math.Clamp(weeks, 1, 8);
                 var now = DateTime.UtcNow;
                 var startOfMonth = new DateOnly(now.Year, now.Month, 1);
                 var monthEndExclusive = DateOnly.FromDateTime(new DateTime(now.Year, now.Month, 1).AddMonths(1));
+                var daysInMonth = DateTime.DaysInMonth(now.Year, now.Month);
+                var computedMonthWeeks = (int)Math.Ceiling(daysInMonth / 7d);
+                weeks = weeks <= 0 ? computedMonthWeeks : Math.Clamp(weeks, 1, 8);
 
                 var data = new List<WeeklyMemberGrowthDto>(weeks);
                 for (var i = 0; i < weeks; i++)
