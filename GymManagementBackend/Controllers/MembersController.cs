@@ -226,6 +226,62 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpPost("{id}/owner/payment-update")]
+        public async Task<IActionResult> UpdatePaidAmountWithTransaction(Guid id, [FromBody] OwnerPaymentUpdateDto ownerPaymentUpdateDto, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.UpdatePaidAmountWithTransactionAsync(effectiveGymId, id, ownerPaymentUpdateDto);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Member not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error updating paid amount with transaction: {ex.Message}");
+                return StatusCode(500, new { message = "Error updating paid amount with transaction" });
+            }
+        }
+
+        [HttpPost("{id}/owner/renew")]
+        public async Task<IActionResult> RenewMemberWithTransaction(Guid id, [FromBody] OwnerRenewMemberDto ownerRenewMemberDto, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.RenewMemberWithTransactionAsync(effectiveGymId, id, ownerRenewMemberDto);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Member not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error renewing member with transaction: {ex.Message}");
+                return StatusCode(500, new { message = "Error renewing member with transaction" });
+            }
+        }
+
         [HttpGet("upcoming-renewals")]
         public async Task<IActionResult> GetUpcomingRenewals(
             [FromQuery] int days = 7,

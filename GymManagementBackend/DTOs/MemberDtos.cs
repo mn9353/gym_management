@@ -12,6 +12,10 @@ namespace GymManagementBackend.DTOs
         [StringLength(15)]
         public string? Phone { get; set; }
 
+        [StringLength(100)]
+        [EmailAddress]
+        public string? Email { get; set; }
+
         [StringLength(20)]
         public string? Gender { get; set; }
 
@@ -25,7 +29,7 @@ namespace GymManagementBackend.DTOs
 
         public DateOnly? PlanEndDate { get; set; }
 
-        [Range(1, 120)]
+        [Range(1, 20)]
         public int? PlanDurationMonths { get; set; }
 
         [StringLength(50)]
@@ -60,7 +64,7 @@ namespace GymManagementBackend.DTOs
         [Required]
         public DateOnly PlanStartDate { get; set; }
 
-        [Range(1, 120)]
+        [Range(1, 20)]
         public int PlanDurationMonths { get; set; } = 1;
 
         public decimal? AmountPaid { get; set; }
@@ -81,6 +85,41 @@ namespace GymManagementBackend.DTOs
     {
         [Range(typeof(decimal), "0.01", "9999999999")]
         public decimal Amount { get; set; }
+
+        public DateOnly? PaymentDate { get; set; }
+
+        [StringLength(20)]
+        public string? PaymentMode { get; set; }
+
+        public string? Remarks { get; set; }
+    }
+
+    public class OwnerPaymentUpdateDto
+    {
+        [Range(typeof(decimal), "0.01", "9999999999")]
+        public decimal NewAmountPaidTotal { get; set; }
+
+        public DateOnly? PaymentDate { get; set; }
+
+        [StringLength(20)]
+        public string? PaymentMode { get; set; }
+
+        public string? Remarks { get; set; }
+    }
+
+    public class OwnerRenewMemberDto
+    {
+        [Required]
+        public DateOnly PlanStartDate { get; set; }
+
+        [Range(1, 20)]
+        public int PlanDurationMonths { get; set; } = 1;
+
+        [Range(typeof(decimal), "0.01", "9999999999")]
+        public decimal AmountToPayIncrement { get; set; }
+
+        [Range(typeof(decimal), "0", "9999999999")]
+        public decimal AmountPaidNow { get; set; } = 0m;
 
         public DateOnly? PaymentDate { get; set; }
 
@@ -111,6 +150,20 @@ namespace GymManagementBackend.DTOs
         public PaymentTransactionDto Payment { get; set; } = new();
     }
 
+    public class MemberRenewalUpdateDto
+    {
+        public Guid MemberId { get; set; }
+        public DateOnly PlanStartDate { get; set; }
+        public DateOnly PlanEndDate { get; set; }
+        public string? MembershipType { get; set; }
+        public decimal AmountPaid { get; set; }
+        public decimal AmountToPay { get; set; }
+        public decimal PendingAmount { get; set; }
+        public string PaymentStatus { get; set; } = string.Empty;
+        public DateOnly? LastPaymentDate { get; set; }
+        public PaymentTransactionDto? Payment { get; set; }
+    }
+
     public class UpdateMemberDto
     {
         [StringLength(100)]
@@ -118,6 +171,10 @@ namespace GymManagementBackend.DTOs
 
         [StringLength(15)]
         public string? Phone { get; set; }
+
+        [StringLength(100)]
+        [EmailAddress]
+        public string? Email { get; set; }
 
         [StringLength(20)]
         public string? Gender { get; set; }
@@ -159,6 +216,7 @@ namespace GymManagementBackend.DTOs
         public Guid GymId { get; set; }
         public string FullName { get; set; } = string.Empty;
         public string? Phone { get; set; }
+        public string? Email { get; set; }
         public string? Gender { get; set; }
         public DateOnly? DateOfBirth { get; set; }
         public DateOnly JoinDate { get; set; }
@@ -185,6 +243,7 @@ namespace GymManagementBackend.DTOs
     public class MemberSearchDto
     {
         public string? SearchTerm { get; set; }
+        public string? Email { get; set; }
         public string? Status { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
@@ -202,6 +261,7 @@ namespace GymManagementBackend.DTOs
         public string? SearchTerm { get; set; }
         public string? FullName { get; set; }
         public string? Phone { get; set; }
+        public string? Email { get; set; }
         public string? Gender { get; set; }
         public string? PaymentStatus { get; set; }
         public string? MembershipType { get; set; }
@@ -227,6 +287,7 @@ namespace GymManagementBackend.DTOs
         public Guid Id { get; set; }
         public string FullName { get; set; } = string.Empty;
         public string? Phone { get; set; }
+        public string? Email { get; set; }
         public string? ProfileImageUrl { get; set; }
         public string? Gender { get; set; }
         public DateOnly JoinDate { get; set; }
@@ -262,6 +323,7 @@ namespace GymManagementBackend.DTOs
         public Guid Id { get; set; }
         public string FullName { get; set; } = string.Empty;
         public string? Phone { get; set; }
+        public string? Email { get; set; }
         public DateOnly PlanStartDate { get; set; }
         public DateOnly PlanEndDate { get; set; }
         public string Status { get; set; } = string.Empty;

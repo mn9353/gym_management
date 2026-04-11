@@ -23,6 +23,10 @@ namespace GymManagementBackend.Models
         [StringLength(15)]
         public string? Phone { get; set; }
 
+        [Column("email")]
+        [StringLength(100)]
+        public string? Email { get; set; }
+
         [Column("gender")]
         [StringLength(20)]
         public string? Gender { get; set; }
