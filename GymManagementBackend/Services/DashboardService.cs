@@ -107,6 +107,12 @@ namespace GymManagementBackend.Services
                                       m.PlanEndDate <= nextWeek &&
                                       m.Status != "PAUSED");
 
+                stats.ExpiringThisMonth = await _context.Members
+                    .CountAsync(m => m.GymId == gymId
+                                     && m.PlanEndDate >= DateOnly.FromDateTime(currentMonth)
+                                     && m.PlanEndDate < DateOnly.FromDateTime(currentMonthEnd)
+                                     && m.Status != "PAUSED");
+
                 // Expired members (strictly date-driven)
                 stats.ExpiredMembers = await _context.Members
                     .CountAsync(m => m.GymId == gymId && 
@@ -278,6 +284,7 @@ ORDER BY m.month_start;";
                         Id = m.Id,
                         FullName = m.FullName,
                         Phone = m.Phone,
+                        ProfileImageUrl = m.ProfileImageUrl,
                         JoinDate = m.JoinDate,
                         PlanEndDate = m.PlanEndDate,
                         Status = m.Status,
@@ -298,13 +305,27 @@ ORDER BY m.month_start;";
             try
             {
                 weeks = Math.Clamp(weeks, 1, 8);
-                var startOfMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+                var now = DateTime.UtcNow;
+                var startOfMonth = new DateOnly(now.Year, now.Month, 1);
+                var monthEndExclusive = DateOnly.FromDateTime(new DateTime(now.Year, now.Month, 1).AddMonths(1));
 
                 var data = new List<WeeklyMemberGrowthDto>(weeks);
                 for (var i = 0; i < weeks; i++)
                 {
                     var weekStart = startOfMonth.AddDays(i * 7);
-                    var weekEndExclusive = weekStart.AddDays(7);
+                    if (weekStart >= monthEndExclusive)
+                    {
+                        data.Add(new WeeklyMemberGrowthDto
+                        {
+                            Week = $"Week {i + 1}",
+                            NewJoinees = 0,
+                            InactiveMembers = 0
+                        });
+                        continue;
+                    }
+
+                    var computedEnd = weekStart.AddDays(7);
+                    var weekEndExclusive = computedEnd < monthEndExclusive ? computedEnd : monthEndExclusive;
 
                     var joins = await _context.Members
                         .CountAsync(m => m.GymId == gymId

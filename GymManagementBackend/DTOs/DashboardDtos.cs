@@ -9,6 +9,7 @@ namespace GymManagementBackend.DTOs
         public decimal RevenueThisMonth { get; set; }
         public decimal RevenueLastMonth { get; set; }
         public int ExpiringInNext7Days { get; set; }
+        public int ExpiringThisMonth { get; set; }
         public int ExpiredMembers { get; set; }
         public int InactiveThisMonth { get; set; }
     }
@@ -37,6 +38,7 @@ namespace GymManagementBackend.DTOs
         public Guid Id { get; set; }
         public string FullName { get; set; } = string.Empty;
         public string? Phone { get; set; }
+        public string? ProfileImageUrl { get; set; }
         public DateOnly JoinDate { get; set; }
         public DateOnly PlanEndDate { get; set; }
         public string Status { get; set; } = string.Empty;
