@@ -3,11 +3,14 @@ namespace GymManagementBackend.DTOs
     public class DashboardStatsDto
     {
         public int TotalActiveMembers { get; set; }
+        public int TotalActiveMembersLastMonth { get; set; }
         public int NewJoinsThisMonth { get; set; }
         public int NewJoinsLastMonth { get; set; }
         public decimal RevenueThisMonth { get; set; }
+        public decimal RevenueLastMonth { get; set; }
         public int ExpiringInNext7Days { get; set; }
         public int ExpiredMembers { get; set; }
+        public int InactiveThisMonth { get; set; }
     }
 
     public class MonthlyJoinTrendDto
@@ -38,6 +41,14 @@ namespace GymManagementBackend.DTOs
         public DateOnly PlanEndDate { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? MembershipType { get; set; }
+        public decimal? AmountPaid { get; set; }
+    }
+
+    public class WeeklyMemberGrowthDto
+    {
+        public string Week { get; set; } = string.Empty;
+        public int NewJoinees { get; set; }
+        public int InactiveMembers { get; set; }
     }
 
     public class DashboardDto

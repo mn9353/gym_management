@@ -12,6 +12,7 @@ namespace GymManagementBackend.Services
         Task<List<MonthlyRevenueTrendDto>> GetMonthlyRevenueTrendAsync(Guid gymId, int months = 6);
         Task<List<MonthlyMemberFlowDto>> GetMonthlyMemberFlowAsync(Guid gymId, int months = 6);
         Task<List<RecentMemberDto>> GetRecentMembersAsync(Guid gymId, int limit = 5);
+        Task<List<WeeklyMemberGrowthDto>> GetWeeklyGrowthAsync(Guid gymId, int weeks = 4);
     }
 
     public class DashboardService : IDashboardService
@@ -54,6 +55,9 @@ namespace GymManagementBackend.Services
                 var today = DateOnly.FromDateTime(DateTime.UtcNow);
                 var currentMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
                 var lastMonth = currentMonth.AddMonths(-1);
+                var currentMonthEnd = currentMonth.AddMonths(1);
+                var lastMonthEnd = currentMonth.AddDays(-1);
+                var lastMonthStart = lastMonth;
                 var nextWeek = today.AddDays(7);
 
                 var stats = new DashboardStatsDto();
@@ -63,6 +67,11 @@ namespace GymManagementBackend.Services
                     .CountAsync(m => m.GymId == gymId && 
                                       m.Status != "PAUSED" &&
                                       m.PlanEndDate >= today);
+
+                stats.TotalActiveMembersLastMonth = await _context.Members
+                    .CountAsync(m => m.GymId == gymId
+                                     && m.Status != "PAUSED"
+                                     && m.PlanEndDate >= DateOnly.FromDateTime(lastMonthEnd));
 
                 // New joins this month
                 stats.NewJoinsThisMonth = await _context.Members
@@ -84,6 +93,13 @@ namespace GymManagementBackend.Services
                     .Select(p => (decimal?)p.Amount)
                     .SumAsync()) ?? 0m;
 
+                stats.RevenueLastMonth = (await _context.Payments
+                    .Where(p => p.GymId == gymId
+                                && p.PaymentDate >= DateOnly.FromDateTime(lastMonthStart)
+                                && p.PaymentDate < DateOnly.FromDateTime(currentMonth))
+                    .Select(p => (decimal?)p.Amount)
+                    .SumAsync()) ?? 0m;
+
                 // Expiring in next 7 days (date-driven; paused members are excluded)
                 stats.ExpiringInNext7Days = await _context.Members
                     .CountAsync(m => m.GymId == gymId && 
@@ -95,6 +111,12 @@ namespace GymManagementBackend.Services
                 stats.ExpiredMembers = await _context.Members
                     .CountAsync(m => m.GymId == gymId && 
                                       m.PlanEndDate < today);
+
+                stats.InactiveThisMonth = await _context.Members
+                    .CountAsync(m => m.GymId == gymId
+                                     && m.PlanEndDate >= DateOnly.FromDateTime(currentMonth)
+                                     && m.PlanEndDate < DateOnly.FromDateTime(currentMonthEnd)
+                                     && m.PlanEndDate < today);
 
                 return stats;
             }
@@ -259,13 +281,54 @@ ORDER BY m.month_start;";
                         JoinDate = m.JoinDate,
                         PlanEndDate = m.PlanEndDate,
                         Status = m.Status,
-                        MembershipType = m.MembershipType
+                        MembershipType = m.MembershipType,
+                        AmountPaid = m.AmountPaid
                     })
                     .ToListAsync();
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting recent members: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<List<WeeklyMemberGrowthDto>> GetWeeklyGrowthAsync(Guid gymId, int weeks = 4)
+        {
+            try
+            {
+                weeks = Math.Clamp(weeks, 1, 8);
+                var startOfMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+
+                var data = new List<WeeklyMemberGrowthDto>(weeks);
+                for (var i = 0; i < weeks; i++)
+                {
+                    var weekStart = startOfMonth.AddDays(i * 7);
+                    var weekEndExclusive = weekStart.AddDays(7);
+
+                    var joins = await _context.Members
+                        .CountAsync(m => m.GymId == gymId
+                                         && m.JoinDate >= weekStart
+                                         && m.JoinDate < weekEndExclusive);
+
+                    var inactive = await _context.Members
+                        .CountAsync(m => m.GymId == gymId
+                                         && m.PlanEndDate >= weekStart
+                                         && m.PlanEndDate < weekEndExclusive);
+
+                    data.Add(new WeeklyMemberGrowthDto
+                    {
+                        Week = $"Week {i + 1}",
+                        NewJoinees = joins,
+                        InactiveMembers = inactive
+                    });
+                }
+
+                return data;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting weekly growth: {ex.Message}");
                 throw;
             }
         }

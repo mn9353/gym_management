@@ -158,5 +158,25 @@ namespace GymManagementBackend.Controllers
                 return StatusCode(500, new { message = "Error getting member flow" });
             }
         }
+
+        [HttpGet("weekly-growth")]
+        public async Task<IActionResult> GetWeeklyGrowth([FromQuery] int weeks = 4, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var growth = await _dashboardService.GetWeeklyGrowthAsync(effectiveGymId, weeks);
+                return Ok(growth);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting weekly growth: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting weekly growth" });
+            }
+        }
     }
 }
