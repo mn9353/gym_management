@@ -2,6 +2,7 @@ using GymManagementBackend.Data;
 using GymManagementBackend.DTOs;
 using GymManagementBackend.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace GymManagementBackend.Services
 {
@@ -15,6 +16,7 @@ namespace GymManagementBackend.Services
         Task<List<MemberDto>> SearchMembersAsync(Guid gymId, MemberSearchDto searchDto);
         Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100);
         Task<PagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment);
+        Task<PagedResponseDto<MemberListItemDto>> GetMembersGridAsync(Guid gymId, MemberGridRequestDto request, string segment);
     }
 
     public class MemberService : IMemberService
@@ -358,6 +360,72 @@ namespace GymManagementBackend.Services
             }
         }
 
+        public async Task<PagedResponseDto<MemberListItemDto>> GetMembersGridAsync(Guid gymId, MemberGridRequestDto request, string segment)
+        {
+            try
+            {
+                request.PageNumber = Math.Max(1, request.PageNumber);
+                request.PageSize = Math.Clamp(request.PageSize, 5, 200);
+                request.UpcomingDays = Math.Clamp(request.UpcomingDays, 1, 90);
+
+                var query = _context.Members
+                    .AsNoTracking()
+                    .Where(m => m.GymId == gymId);
+
+                query = ApplyGridSegmentFilter(query, request.UpcomingDays, segment);
+                query = ApplyAgGridFilters(query, request.Filters);
+
+                if (!string.IsNullOrWhiteSpace(request.SearchText))
+                {
+                    var term = request.SearchText.Trim();
+                    query = query.Where(m =>
+                        EF.Functions.ILike(m.FullName, $"%{term}%")
+                        || (m.Phone != null && EF.Functions.ILike(m.Phone, $"%{term}%"))
+                        || (m.MembershipType != null && EF.Functions.ILike(m.MembershipType, $"%{term}%")));
+                }
+
+                var totalCount = await query.CountAsync();
+                var sortField = request.Sort?.Field ?? "planEndDate";
+                var sortDirection = request.Sort?.Direction ?? "asc";
+                query = ApplySorting(query, sortField, sortDirection);
+
+                var items = await query
+                    .Skip((request.PageNumber - 1) * request.PageSize)
+                    .Take(request.PageSize)
+                    .Select(m => new MemberListItemDto
+                    {
+                        Id = m.Id,
+                        FullName = m.FullName,
+                        Phone = m.Phone,
+                        Gender = m.Gender,
+                        JoinDate = m.JoinDate,
+                        PlanStartDate = m.PlanStartDate,
+                        PlanEndDate = m.PlanEndDate,
+                        Status = m.Status,
+                        PaymentStatus = m.PaymentStatus,
+                        MembershipType = m.MembershipType,
+                        TrainerAssigned = m.TrainerAssigned,
+                        AmountPaid = request.IncludeAmount ? m.AmountPaid : null
+                    })
+                    .ToListAsync();
+
+                var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)request.PageSize));
+                return new PagedResponseDto<MemberListItemDto>
+                {
+                    Items = items,
+                    PageNumber = request.PageNumber,
+                    PageSize = request.PageSize,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting AG Grid members list for segment {segment}: {ex.Message}");
+                throw;
+            }
+        }
+
         private static MemberListQueryDto NormalizeQuery(MemberListQueryDto query)
         {
             query.PageNumber = Math.Max(1, query.PageNumber);
@@ -535,6 +603,177 @@ namespace GymManagementBackend.Services
                 ("planenddate", true) => query.OrderByDescending(m => m.PlanEndDate).ThenBy(m => m.Id),
                 _ => query.OrderBy(m => m.PlanEndDate).ThenBy(m => m.Id)
             };
+        }
+
+        private static IQueryable<Member> ApplyGridSegmentFilter(IQueryable<Member> query, int upcomingDays, string segment)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var normalizedSegment = (segment ?? string.Empty).Trim().ToLowerInvariant();
+            return normalizedSegment switch
+            {
+                "active" => query.Where(m => m.Status == "ACTIVE"),
+                "inactive" => query.Where(m => m.Status == "EXPIRED"),
+                "upcoming" => query.Where(m =>
+                    m.PlanEndDate >= today
+                    && m.PlanEndDate <= today.AddDays(upcomingDays)
+                    && m.Status != "PAUSED"),
+                _ => query
+            };
+        }
+
+        private static IQueryable<Member> ApplyAgGridFilters(IQueryable<Member> query, Dictionary<string, JsonElement>? filters)
+        {
+            if (filters == null || filters.Count == 0)
+            {
+                return query;
+            }
+
+            foreach (var filter in filters)
+            {
+                var key = NormalizeGridField(filter.Key);
+                var value = filter.Value;
+
+                if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("filterType", out var filterTypeEl))
+                {
+                    continue;
+                }
+
+                var filterType = filterTypeEl.GetString()?.ToLowerInvariant();
+                query = filterType switch
+                {
+                    "text" => ApplyTextFilter(query, key, value),
+                    "date" => ApplyDateFilter(query, key, value),
+                    "set" => ApplySetFilter(query, key, value),
+                    _ => query
+                };
+            }
+
+            return query;
+        }
+
+        private static string NormalizeGridField(string field)
+        {
+            return field.Trim().ToLowerInvariant() switch
+            {
+                "name" => "fullname",
+                _ => field.Trim().ToLowerInvariant()
+            };
+        }
+
+        private static IQueryable<Member> ApplyTextFilter(IQueryable<Member> query, string field, JsonElement filterObj)
+        {
+            var type = filterObj.TryGetProperty("type", out var typeEl) ? typeEl.GetString()?.ToLowerInvariant() : "contains";
+            var filter = filterObj.TryGetProperty("filter", out var valueEl) ? valueEl.GetString() : null;
+            if (string.IsNullOrWhiteSpace(filter))
+            {
+                return query;
+            }
+
+            var value = filter.Trim();
+            return (field, type) switch
+            {
+                ("fullname", "equals") => query.Where(m => m.FullName == value),
+                ("fullname", "startswith") => query.Where(m => EF.Functions.ILike(m.FullName, $"{value}%")),
+                ("fullname", "endswith") => query.Where(m => EF.Functions.ILike(m.FullName, $"%{value}")),
+                ("fullname", _) => query.Where(m => EF.Functions.ILike(m.FullName, $"%{value}%")),
+
+                ("phone", "equals") => query.Where(m => m.Phone != null && m.Phone == value),
+                ("phone", "startswith") => query.Where(m => m.Phone != null && EF.Functions.ILike(m.Phone, $"{value}%")),
+                ("phone", "endswith") => query.Where(m => m.Phone != null && EF.Functions.ILike(m.Phone, $"%{value}")),
+                ("phone", _) => query.Where(m => m.Phone != null && EF.Functions.ILike(m.Phone, $"%{value}%")),
+
+                ("status", "equals") => query.Where(m => m.Status.ToUpper() == value.ToUpper()),
+                ("paymentstatus", "equals") => query.Where(m => m.PaymentStatus.ToUpper() == value.ToUpper()),
+                _ => query
+            };
+        }
+
+        private static IQueryable<Member> ApplyDateFilter(IQueryable<Member> query, string field, JsonElement filterObj)
+        {
+            var type = filterObj.TryGetProperty("type", out var typeEl) ? typeEl.GetString()?.ToLowerInvariant() : "equals";
+            var dateFromString = filterObj.TryGetProperty("dateFrom", out var fromEl) ? fromEl.GetString() : null;
+            var dateToString = filterObj.TryGetProperty("dateTo", out var toEl) ? toEl.GetString() : null;
+
+            if (!TryParseDateOnly(dateFromString, out var dateFrom))
+            {
+                return query;
+            }
+
+            var hasDateTo = TryParseDateOnly(dateToString, out var dateTo);
+            return (field, type) switch
+            {
+                ("planstartdate", "inrange") when hasDateTo => query.Where(m => m.PlanStartDate >= dateFrom && m.PlanStartDate <= dateTo),
+                ("planstartdate", "lessthan") => query.Where(m => m.PlanStartDate < dateFrom),
+                ("planstartdate", "greaterthan") => query.Where(m => m.PlanStartDate > dateFrom),
+                ("planstartdate", _) => query.Where(m => m.PlanStartDate == dateFrom),
+
+                ("planenddate", "inrange") when hasDateTo => query.Where(m => m.PlanEndDate >= dateFrom && m.PlanEndDate <= dateTo),
+                ("planenddate", "lessthan") => query.Where(m => m.PlanEndDate < dateFrom),
+                ("planenddate", "greaterthan") => query.Where(m => m.PlanEndDate > dateFrom),
+                ("planenddate", _) => query.Where(m => m.PlanEndDate == dateFrom),
+
+                ("joindate", "inrange") when hasDateTo => query.Where(m => m.JoinDate >= dateFrom && m.JoinDate <= dateTo),
+                ("joindate", "lessthan") => query.Where(m => m.JoinDate < dateFrom),
+                ("joindate", "greaterthan") => query.Where(m => m.JoinDate > dateFrom),
+                ("joindate", _) => query.Where(m => m.JoinDate == dateFrom),
+                _ => query
+            };
+        }
+
+        private static IQueryable<Member> ApplySetFilter(IQueryable<Member> query, string field, JsonElement filterObj)
+        {
+            if (!filterObj.TryGetProperty("values", out var valuesEl) || valuesEl.ValueKind != JsonValueKind.Array)
+            {
+                return query;
+            }
+
+            var values = valuesEl.EnumerateArray()
+                .Select(v => v.GetString())
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v!.Trim())
+                .ToList();
+
+            if (values.Count == 0)
+            {
+                return query;
+            }
+
+            if (field == "gender")
+            {
+                var normalized = values.Select(v => v.ToUpperInvariant() switch
+                {
+                    "M" => "MALE",
+                    "F" => "FEMALE",
+                    _ => v.ToUpperInvariant()
+                }).ToList();
+                return query.Where(m => m.Gender != null && normalized.Contains(m.Gender.ToUpper()));
+            }
+
+            if (field == "status")
+            {
+                var normalized = values.Select(v => v.ToUpperInvariant()).ToList();
+                return query.Where(m => normalized.Contains(m.Status.ToUpper()));
+            }
+
+            if (field == "paymentstatus")
+            {
+                var normalized = values.Select(v => v.ToUpperInvariant()).ToList();
+                return query.Where(m => normalized.Contains(m.PaymentStatus.ToUpper()));
+            }
+
+            return query;
+        }
+
+        private static bool TryParseDateOnly(string? input, out DateOnly value)
+        {
+            value = default;
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return false;
+            }
+
+            var datePart = input.Contains(' ') ? input.Split(' ')[0] : input;
+            return DateOnly.TryParse(datePart, out value);
         }
 
         private static void ValidateMembershipDates(DateOnly planStartDate, DateOnly planEndDate)

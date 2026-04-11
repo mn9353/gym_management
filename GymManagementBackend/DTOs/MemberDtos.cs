@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 
 namespace GymManagementBackend.DTOs
 {
@@ -181,5 +182,22 @@ namespace GymManagementBackend.DTOs
         public int PageSize { get; set; }
         public int TotalCount { get; set; }
         public int TotalPages { get; set; }
+    }
+
+    public class MemberGridRequestDto
+    {
+        public Dictionary<string, JsonElement>? Filters { get; set; } = new();
+        public MemberGridSortDto? Sort { get; set; }
+        public string? SearchText { get; set; }
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+        public bool IncludeAmount { get; set; } = false;
+        public int UpcomingDays { get; set; } = 7;
+    }
+
+    public class MemberGridSortDto
+    {
+        public string Field { get; set; } = "planEndDate";
+        public string Direction { get; set; } = "asc";
     }
 }

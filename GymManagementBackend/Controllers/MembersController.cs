@@ -245,6 +245,66 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpPost("active/grid")]
+        public async Task<IActionResult> GetActiveMembersGrid([FromBody] MemberGridRequestDto request, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.GetMembersGridAsync(effectiveGymId, request, "active");
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting active members grid: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting active members grid" });
+            }
+        }
+
+        [HttpPost("inactive/grid")]
+        public async Task<IActionResult> GetInactiveMembersGrid([FromBody] MemberGridRequestDto request, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.GetMembersGridAsync(effectiveGymId, request, "inactive");
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting inactive members grid: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting inactive members grid" });
+            }
+        }
+
+        [HttpPost("upcoming-renewals/grid")]
+        public async Task<IActionResult> GetUpcomingRenewalsGrid([FromBody] MemberGridRequestDto request, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.GetMembersGridAsync(effectiveGymId, request, "upcoming");
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting upcoming renewals grid: {ex.Message}");
+                return StatusCode(500, new { message = "Error getting upcoming renewals grid" });
+            }
+        }
+
         private Guid ResolveGymId(Guid? requestedGymId)
         {
             if (User.IsAdmin())
