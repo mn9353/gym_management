@@ -52,6 +52,9 @@ namespace GymManagementBackend.Models
         [Column("amount_paid")]
         public decimal? AmountPaid { get; set; }
 
+        [Column("amount_to_pay")]
+        public decimal? AmountToPay { get; set; }
+
         [Column("payment_status")]
         [StringLength(20)]
         public string PaymentStatus { get; set; } = "PENDING"; // PAID, PENDING, PARTIAL

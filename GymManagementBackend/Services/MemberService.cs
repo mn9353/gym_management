@@ -7,9 +7,21 @@ using System.Linq.Expressions;
 
 namespace GymManagementBackend.Services
 {
+    public sealed class DuplicateMemberException : Exception
+    {
+        public ExistingMemberSummaryDto ExistingMember { get; }
+
+        public DuplicateMemberException(string message, ExistingMemberSummaryDto existingMember) : base(message)
+        {
+            ExistingMember = existingMember;
+        }
+    }
+
     public interface IMemberService
     {
         Task<MemberDto> CreateMemberAsync(Guid gymId, CreateMemberDto createMemberDto);
+        Task<MemberDto> RenewMemberAsync(Guid gymId, Guid memberId, RenewMemberDto renewMemberDto);
+        Task<MemberPaymentUpdateDto> AddMemberPaymentAsync(Guid gymId, Guid memberId, AddMemberPaymentDto addPaymentDto);
         Task<MemberDto> UpdateMemberAsync(Guid gymId, Guid memberId, UpdateMemberDto updateMemberDto);
         Task<bool> DeleteMemberAsync(Guid gymId, Guid memberId);
         Task<MemberDto> GetMemberAsync(Guid gymId, Guid memberId);
@@ -39,6 +51,7 @@ namespace GymManagementBackend.Services
             LastPaymentDate = m.LastPaymentDate,
             MembershipType = m.MembershipType,
             AmountPaid = m.AmountPaid,
+            AmountToPay = m.AmountToPay,
             PaymentStatus = m.PaymentStatus,
             Status = m.Status,
             Notes = m.Notes,
@@ -63,7 +76,17 @@ namespace GymManagementBackend.Services
         {
             try
             {
-                ValidateMembershipDates(createMemberDto.PlanStartDate, createMemberDto.PlanEndDate);
+                var duplicateMember = await FindDuplicateMemberAsync(gymId, createMemberDto.Phone);
+                if (duplicateMember is not null)
+                {
+                    throw new DuplicateMemberException(
+                        "A member with this phone number already exists. Use renew for existing member.",
+                        MapExistingMemberSummary(duplicateMember));
+                }
+
+                var planEndDate = ResolvePlanEndDate(createMemberDto.PlanStartDate, createMemberDto.PlanDurationMonths, createMemberDto.PlanEndDate);
+                ValidateMembershipDates(createMemberDto.PlanStartDate, planEndDate);
+                var membershipType = ResolveMembershipType(createMemberDto.PlanDurationMonths, createMemberDto.MembershipType);
 
                 var member = new Member
                 {
@@ -74,9 +97,10 @@ namespace GymManagementBackend.Services
                     DateOfBirth = createMemberDto.DateOfBirth,
                     JoinDate = createMemberDto.JoinDate,
                     PlanStartDate = createMemberDto.PlanStartDate,
-                    PlanEndDate = createMemberDto.PlanEndDate,
-                    MembershipType = createMemberDto.MembershipType?.Trim(),
+                    PlanEndDate = planEndDate,
+                    MembershipType = membershipType,
                     AmountPaid = createMemberDto.AmountPaid,
+                    AmountToPay = createMemberDto.AmountToPay,
                     PaymentStatus = createMemberDto.PaymentStatus,
                     EmergencyContact = createMemberDto.EmergencyContact?.Trim(),
                     Height = createMemberDto.Height,
@@ -85,7 +109,7 @@ namespace GymManagementBackend.Services
                     TrainerAssigned = createMemberDto.TrainerAssigned?.Trim(),
                     LeadSource = createMemberDto.LeadSource?.Trim(),
                     Notes = createMemberDto.Notes?.Trim(),
-                    Status = ResolveStatusFromPlanEndDate(createMemberDto.PlanEndDate)
+                    Status = ResolveStatusFromPlanEndDate(planEndDate)
                 };
 
                 _context.Members.Add(member);
@@ -97,6 +121,139 @@ namespace GymManagementBackend.Services
             catch (Exception ex)
             {
                 _logger.LogError($"Error creating member: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<MemberDto> RenewMemberAsync(Guid gymId, Guid memberId, RenewMemberDto renewMemberDto)
+        {
+            try
+            {
+                var member = await _context.Members
+                    .FirstOrDefaultAsync(m => m.Id == memberId && m.GymId == gymId);
+
+                if (member == null)
+                {
+                    throw new KeyNotFoundException("Member not found");
+                }
+
+                var planEndDate = ResolvePlanEndDate(renewMemberDto.PlanStartDate, renewMemberDto.PlanDurationMonths, null);
+                ValidateMembershipDates(renewMemberDto.PlanStartDate, planEndDate);
+                var membershipType = ResolveMembershipType(renewMemberDto.PlanDurationMonths, null);
+                var paymentDate = renewMemberDto.PaymentDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+                var paymentStatus = string.IsNullOrWhiteSpace(renewMemberDto.PaymentStatus)
+                    ? "PAID"
+                    : renewMemberDto.PaymentStatus.Trim().ToUpperInvariant();
+
+                member.PlanStartDate = renewMemberDto.PlanStartDate;
+                member.PlanEndDate = planEndDate;
+                member.MembershipType = membershipType;
+                member.AmountPaid = renewMemberDto.AmountPaid ?? member.AmountPaid;
+                member.AmountToPay = renewMemberDto.AmountToPay ?? member.AmountToPay;
+                member.PaymentStatus = string.IsNullOrWhiteSpace(renewMemberDto.PaymentStatus)
+                    ? ResolvePaymentStatus(member.AmountPaid ?? 0m, member.AmountToPay)
+                    : paymentStatus;
+                member.LastPaymentDate = paymentDate;
+                member.Status = ResolveStatusFromPlanEndDate(planEndDate);
+                member.UpdatedAt = DateTime.UtcNow;
+
+                var paymentAmount = renewMemberDto.AmountPaid ?? member.AmountPaid ?? 0m;
+                var payment = new Payment
+                {
+                    GymId = gymId,
+                    MemberId = member.Id,
+                    Amount = paymentAmount,
+                    PaymentDate = paymentDate,
+                    PaymentMode = renewMemberDto.PaymentMode?.Trim(),
+                    PlanDurationMonths = renewMemberDto.PlanDurationMonths,
+                    Remarks = renewMemberDto.Remarks?.Trim()
+                };
+
+                _context.Payments.Add(payment);
+                _context.Members.Update(member);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Member renewed: {MemberId}", memberId);
+                return MapMemberToDto(member);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error renewing member: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<MemberPaymentUpdateDto> AddMemberPaymentAsync(Guid gymId, Guid memberId, AddMemberPaymentDto addPaymentDto)
+        {
+            try
+            {
+                if (addPaymentDto.Amount <= 0m)
+                {
+                    throw new InvalidOperationException("Payment amount must be greater than zero.");
+                }
+
+                var member = await _context.Members
+                    .FirstOrDefaultAsync(m => m.Id == memberId && m.GymId == gymId);
+
+                if (member == null)
+                {
+                    throw new KeyNotFoundException("Member not found");
+                }
+
+                var paymentDate = addPaymentDto.PaymentDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+                var paymentMode = NormalizePaymentMode(addPaymentDto.PaymentMode);
+                var paymentAmount = decimal.Round(addPaymentDto.Amount, 2, MidpointRounding.AwayFromZero);
+
+                var currentPaid = member.AmountPaid ?? 0m;
+                var nextPaid = currentPaid + paymentAmount;
+                var amountToPay = member.AmountToPay ?? 0m;
+                var pendingAmount = amountToPay > 0m ? Math.Max(0m, amountToPay - nextPaid) : 0m;
+                var paymentStatus = ResolvePaymentStatus(nextPaid, member.AmountToPay);
+
+                var payment = new Payment
+                {
+                    GymId = gymId,
+                    MemberId = member.Id,
+                    Amount = paymentAmount,
+                    PaymentDate = paymentDate,
+                    PaymentMode = paymentMode,
+                    Remarks = addPaymentDto.Remarks?.Trim()
+                };
+
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                member.AmountPaid = nextPaid;
+                member.PaymentStatus = paymentStatus;
+                member.LastPaymentDate = paymentDate;
+                member.UpdatedAt = DateTime.UtcNow;
+
+                _context.Payments.Add(payment);
+                _context.Members.Update(member);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return new MemberPaymentUpdateDto
+                {
+                    MemberId = member.Id,
+                    AmountPaid = member.AmountPaid ?? 0m,
+                    AmountToPay = amountToPay,
+                    PendingAmount = pendingAmount,
+                    PaymentStatus = member.PaymentStatus,
+                    LastPaymentDate = member.LastPaymentDate,
+                    Payment = new PaymentTransactionDto
+                    {
+                        Id = payment.Id,
+                        Amount = payment.Amount,
+                        PaymentDate = payment.PaymentDate,
+                        PaymentMode = payment.PaymentMode,
+                        Remarks = payment.Remarks,
+                        CreatedAt = payment.CreatedAt
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error adding member payment: {Message}", ex.Message);
                 throw;
             }
         }
@@ -136,6 +293,9 @@ namespace GymManagementBackend.Services
 
                 if (updateMemberDto.AmountPaid.HasValue)
                     member.AmountPaid = updateMemberDto.AmountPaid;
+
+                if (updateMemberDto.AmountToPay.HasValue)
+                    member.AmountToPay = updateMemberDto.AmountToPay;
 
                 if (!string.IsNullOrEmpty(updateMemberDto.PaymentStatus))
                     member.PaymentStatus = updateMemberDto.PaymentStatus;
@@ -296,6 +456,7 @@ namespace GymManagementBackend.Services
                 LastPaymentDate = member.LastPaymentDate,
                 MembershipType = member.MembershipType,
                 AmountPaid = member.AmountPaid,
+                AmountToPay = member.AmountToPay,
                 PaymentStatus = member.PaymentStatus,
                 Status = member.Status,
                 Notes = member.Notes,
@@ -343,7 +504,8 @@ namespace GymManagementBackend.Services
                         PaymentStatus = m.PaymentStatus,
                         MembershipType = m.MembershipType,
                         TrainerAssigned = m.TrainerAssigned,
-                        AmountPaid = normalized.IncludeAmount ? m.AmountPaid : null
+                        AmountPaid = normalized.IncludeAmount ? m.AmountPaid : null,
+                        AmountToPay = normalized.IncludeAmount ? m.AmountToPay : null
                     })
                     .ToListAsync();
 
@@ -465,7 +627,8 @@ namespace GymManagementBackend.Services
                         PaymentStatus = m.PaymentStatus,
                         MembershipType = m.MembershipType,
                         TrainerAssigned = m.TrainerAssigned,
-                        AmountPaid = request.IncludeAmount ? m.AmountPaid : null
+                        AmountPaid = request.IncludeAmount ? m.AmountPaid : null,
+                        AmountToPay = request.IncludeAmount ? m.AmountToPay : null
                     })
                     .ToListAsync();
 
@@ -643,6 +806,16 @@ namespace GymManagementBackend.Services
                 query = query.Where(m => m.AmountPaid.HasValue && m.AmountPaid.Value <= filters.AmountPaidMax.Value);
             }
 
+            if (filters.AmountToPayMin.HasValue)
+            {
+                query = query.Where(m => m.AmountToPay.HasValue && m.AmountToPay.Value >= filters.AmountToPayMin.Value);
+            }
+
+            if (filters.AmountToPayMax.HasValue)
+            {
+                query = query.Where(m => m.AmountToPay.HasValue && m.AmountToPay.Value <= filters.AmountToPayMax.Value);
+            }
+
             return query;
         }
 
@@ -663,6 +836,8 @@ namespace GymManagementBackend.Services
                 ("planstartdate", true) => query.OrderByDescending(m => m.PlanStartDate).ThenBy(m => m.Id),
                 ("amountpaid", false) => query.OrderBy(m => m.AmountPaid).ThenBy(m => m.Id),
                 ("amountpaid", true) => query.OrderByDescending(m => m.AmountPaid).ThenBy(m => m.Id),
+                ("amounttopay", false) => query.OrderBy(m => m.AmountToPay).ThenBy(m => m.Id),
+                ("amounttopay", true) => query.OrderByDescending(m => m.AmountToPay).ThenBy(m => m.Id),
                 ("status", false) => query.OrderBy(m => m.Status).ThenBy(m => m.Id),
                 ("status", true) => query.OrderByDescending(m => m.Status).ThenBy(m => m.Id),
                 ("planenddate", true) => query.OrderByDescending(m => m.PlanEndDate).ThenBy(m => m.Id),
@@ -851,6 +1026,117 @@ namespace GymManagementBackend.Services
             {
                 throw new InvalidOperationException("Plan end date must be after or equal to plan start date.");
             }
+        }
+
+        private static DateOnly ResolvePlanEndDate(DateOnly planStartDate, int? planDurationMonths, DateOnly? planEndDate)
+        {
+            if (planDurationMonths.HasValue)
+            {
+                if (planDurationMonths.Value <= 0)
+                {
+                    throw new InvalidOperationException("Plan duration must be at least 1 month.");
+                }
+
+                // Inclusive plan window: 1 month starting Apr 1 ends Apr 30.
+                return planStartDate.AddMonths(planDurationMonths.Value).AddDays(-1);
+            }
+
+            if (!planEndDate.HasValue)
+            {
+                throw new InvalidOperationException("Either plan duration months or plan end date is required.");
+            }
+
+            return planEndDate.Value;
+        }
+
+        private static string? ResolveMembershipType(int? planDurationMonths, string? providedMembershipType)
+        {
+            if (planDurationMonths.HasValue)
+            {
+                var months = planDurationMonths.Value;
+                return months switch
+                {
+                    >= 12 => "yearly",
+                    >= 6 => "half yearly",
+                    >= 3 => "quarterly",
+                    1 => "monthly",
+                    _ => $"{months} months"
+                };
+            }
+
+            return providedMembershipType?.Trim();
+        }
+
+        private static string? NormalizePaymentMode(string? paymentMode)
+        {
+            if (string.IsNullOrWhiteSpace(paymentMode))
+            {
+                return null;
+            }
+
+            var normalized = paymentMode.Trim().ToUpperInvariant();
+            if (normalized is not ("CASH" or "UPI" or "CARD"))
+            {
+                throw new InvalidOperationException("Payment mode must be CASH, UPI, or CARD.");
+            }
+
+            return normalized;
+        }
+
+        private static string ResolvePaymentStatus(decimal amountPaid, decimal? amountToPay)
+        {
+            if (amountPaid <= 0m)
+            {
+                return "PENDING";
+            }
+
+            if (!amountToPay.HasValue || amountToPay.Value <= 0m)
+            {
+                return "PAID";
+            }
+
+            return amountPaid < amountToPay.Value ? "PARTIAL" : "PAID";
+        }
+
+        private async Task<Member?> FindDuplicateMemberAsync(Guid gymId, string? phone)
+        {
+            var normalizedPhone = NormalizePhone(phone);
+            if (string.IsNullOrWhiteSpace(normalizedPhone))
+            {
+                return null;
+            }
+
+            var candidates = await _context.Members
+                .AsNoTracking()
+                .Where(m => m.GymId == gymId && m.Phone != null)
+                .ToListAsync();
+
+            return candidates.FirstOrDefault(m => NormalizePhone(m.Phone) == normalizedPhone);
+        }
+
+        private static ExistingMemberSummaryDto MapExistingMemberSummary(Member member)
+        {
+            return new ExistingMemberSummaryDto
+            {
+                Id = member.Id,
+                FullName = member.FullName,
+                Phone = member.Phone,
+                PlanStartDate = member.PlanStartDate,
+                PlanEndDate = member.PlanEndDate,
+                Status = member.Status,
+                MembershipType = member.MembershipType
+            };
+        }
+
+        private static string NormalizePhone(string? phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone))
+            {
+                return string.Empty;
+            }
+
+            var chars = phone.Where(char.IsDigit).ToArray();
+            return new string(chars);
         }
 
         private static string ResolveStatusFromPlanEndDate(DateOnly planEndDate)

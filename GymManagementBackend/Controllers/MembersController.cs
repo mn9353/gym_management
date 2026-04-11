@@ -73,6 +73,14 @@ namespace GymManagementBackend.Controllers
                 var member = await _memberService.CreateMemberAsync(effectiveGymId, createMemberDto);
                 return Created($"/api/members/{member.Id}", member);
             }
+            catch (DuplicateMemberException ex)
+            {
+                return Conflict(new
+                {
+                    message = ex.Message,
+                    existingMember = ex.ExistingMember
+                });
+            }
             catch (UnauthorizedAccessException ex)
             {
                 return Unauthorized(new { message = ex.Message });
@@ -159,6 +167,62 @@ namespace GymManagementBackend.Controllers
             {
                 _logger.LogError($"Error searching members: {ex.Message}");
                 return StatusCode(500, new { message = "Error searching members" });
+            }
+        }
+
+        [HttpPost("{id}/renew")]
+        public async Task<IActionResult> RenewMember(Guid id, [FromBody] RenewMemberDto renewMemberDto, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var member = await _memberService.RenewMemberAsync(effectiveGymId, id, renewMemberDto);
+                return Ok(member);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Member not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error renewing member: {ex.Message}");
+                return StatusCode(500, new { message = "Error renewing member" });
+            }
+        }
+
+        [HttpPost("{id}/payments")]
+        public async Task<IActionResult> AddMemberPayment(Guid id, [FromBody] AddMemberPaymentDto addPaymentDto, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.AddMemberPaymentAsync(effectiveGymId, id, addPaymentDto);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Member not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error adding member payment: {ex.Message}");
+                return StatusCode(500, new { message = "Error adding member payment" });
             }
         }
 

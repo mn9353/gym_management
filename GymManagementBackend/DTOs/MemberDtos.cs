@@ -23,13 +23,16 @@ namespace GymManagementBackend.DTOs
         [Required]
         public DateOnly PlanStartDate { get; set; }
 
-        [Required]
-        public DateOnly PlanEndDate { get; set; }
+        public DateOnly? PlanEndDate { get; set; }
+
+        [Range(1, 120)]
+        public int? PlanDurationMonths { get; set; }
 
         [StringLength(50)]
         public string? MembershipType { get; set; }
 
         public decimal? AmountPaid { get; set; }
+        public decimal? AmountToPay { get; set; }
 
         [StringLength(20)]
         public string PaymentStatus { get; set; } = "PENDING";
@@ -52,6 +55,62 @@ namespace GymManagementBackend.DTOs
         public string? Notes { get; set; }
     }
 
+    public class RenewMemberDto
+    {
+        [Required]
+        public DateOnly PlanStartDate { get; set; }
+
+        [Range(1, 120)]
+        public int PlanDurationMonths { get; set; } = 1;
+
+        public decimal? AmountPaid { get; set; }
+        public decimal? AmountToPay { get; set; }
+
+        [StringLength(20)]
+        public string? PaymentStatus { get; set; } = "PAID";
+
+        public DateOnly? PaymentDate { get; set; }
+
+        [StringLength(20)]
+        public string? PaymentMode { get; set; }
+
+        public string? Remarks { get; set; }
+    }
+
+    public class AddMemberPaymentDto
+    {
+        [Range(typeof(decimal), "0.01", "9999999999")]
+        public decimal Amount { get; set; }
+
+        public DateOnly? PaymentDate { get; set; }
+
+        [StringLength(20)]
+        public string? PaymentMode { get; set; }
+
+        public string? Remarks { get; set; }
+    }
+
+    public class PaymentTransactionDto
+    {
+        public Guid Id { get; set; }
+        public decimal Amount { get; set; }
+        public DateOnly PaymentDate { get; set; }
+        public string? PaymentMode { get; set; }
+        public string? Remarks { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class MemberPaymentUpdateDto
+    {
+        public Guid MemberId { get; set; }
+        public decimal AmountPaid { get; set; }
+        public decimal AmountToPay { get; set; }
+        public decimal PendingAmount { get; set; }
+        public string PaymentStatus { get; set; } = string.Empty;
+        public DateOnly? LastPaymentDate { get; set; }
+        public PaymentTransactionDto Payment { get; set; } = new();
+    }
+
     public class UpdateMemberDto
     {
         [StringLength(100)]
@@ -71,6 +130,7 @@ namespace GymManagementBackend.DTOs
         public string? MembershipType { get; set; }
 
         public decimal? AmountPaid { get; set; }
+        public decimal? AmountToPay { get; set; }
 
         [StringLength(20)]
         public string? PaymentStatus { get; set; }
@@ -107,6 +167,7 @@ namespace GymManagementBackend.DTOs
         public DateOnly? LastPaymentDate { get; set; }
         public string? MembershipType { get; set; }
         public decimal? AmountPaid { get; set; }
+        public decimal? AmountToPay { get; set; }
         public string PaymentStatus { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public string? Notes { get; set; }
@@ -157,6 +218,8 @@ namespace GymManagementBackend.DTOs
         public DateOnly? PlanEndDateTo { get; set; }
         public decimal? AmountPaidMin { get; set; }
         public decimal? AmountPaidMax { get; set; }
+        public decimal? AmountToPayMin { get; set; }
+        public decimal? AmountToPayMax { get; set; }
     }
 
     public class MemberListItemDto
@@ -174,6 +237,7 @@ namespace GymManagementBackend.DTOs
         public string? MembershipType { get; set; }
         public string? TrainerAssigned { get; set; }
         public decimal? AmountPaid { get; set; }
+        public decimal? AmountToPay { get; set; }
     }
 
     public class PagedResponseDto<T>
@@ -191,6 +255,17 @@ namespace GymManagementBackend.DTOs
         public int Active { get; set; }
         public int Expiring { get; set; }
         public int Inactive { get; set; }
+    }
+
+    public class ExistingMemberSummaryDto
+    {
+        public Guid Id { get; set; }
+        public string FullName { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public DateOnly PlanStartDate { get; set; }
+        public DateOnly PlanEndDate { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? MembershipType { get; set; }
     }
 
     public class MemberGridRequestDto
