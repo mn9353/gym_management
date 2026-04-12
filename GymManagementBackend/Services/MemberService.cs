@@ -199,6 +199,7 @@ namespace GymManagementBackend.Services
                 }
 
                 var member = await _context.Members
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(m => m.Id == memberId && m.GymId == gymId);
 
                 if (member == null)
@@ -409,18 +410,10 @@ namespace GymManagementBackend.Services
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                member.PlanStartDate = nextPlanStart;
-                member.PlanEndDate = nextPlanEnd;
-                member.MembershipType = newMembershipType;
-                member.AmountToPay = nextAmountToPay;
-                member.AmountPaid = nextAmountPaid;
-                member.PaymentStatus = ResolvePaymentStatus(nextAmountPaid, nextAmountToPay);
-                member.Status = ResolveStatusFromPlanEndDate(nextPlanEnd);
-                if (amountPaidNow > 0m)
-                {
-                    member.LastPaymentDate = paymentDate;
-                }
-                member.UpdatedAt = GetDbTimestampNow();
+                var nextPaymentStatus = ResolvePaymentStatus(nextAmountPaid, nextAmountToPay);
+                var nextStatus = ResolveStatusFromPlanEndDate(nextPlanEnd);
+                var nextLastPaymentDate = amountPaidNow > 0m ? paymentDate : member.LastPaymentDate;
+                var updatedAt = EnsureUtc(GetDbTimestampNow());
 
                 Payment? payment = null;
                 if (amountPaidNow > 0m)
@@ -434,27 +427,40 @@ namespace GymManagementBackend.Services
                         PaymentMode = paymentMode,
                         PlanDurationMonths = ownerRenewMemberDto.PlanDurationMonths,
                         Remarks = ownerRenewMemberDto.Remarks?.Trim(),
-                        CreatedAt = GetDbTimestampNow()
+                        CreatedAt = EnsureUtc(GetDbTimestampNow())
                     };
                     _context.Payments.Add(payment);
                 }
 
-                _context.Members.Update(member);
                 await _context.SaveChangesAsync();
+
+                await _context.Database.ExecuteSqlInterpolatedAsync($@"
+                    UPDATE members
+                    SET plan_start_date = {nextPlanStart},
+                        plan_end_date = {nextPlanEnd},
+                        membership_type = CAST({newMembershipType} AS ""membershipType""),
+                        amount_to_pay = {nextAmountToPay},
+                        amount_paid = {nextAmountPaid},
+                        payment_status = {nextPaymentStatus},
+                        status = {nextStatus},
+                        last_payment_date = {nextLastPaymentDate},
+                        updated_at = {updatedAt}
+                    WHERE id = {memberId} AND gym_id = {gymId};");
+
                 await transaction.CommitAsync();
 
                 var pendingAmount = Math.Max(0m, nextAmountToPay - nextAmountPaid);
                 return new MemberRenewalUpdateDto
                 {
-                    MemberId = member.Id,
-                    PlanStartDate = member.PlanStartDate,
-                    PlanEndDate = member.PlanEndDate,
-                    MembershipType = member.MembershipType,
+                    MemberId = memberId,
+                    PlanStartDate = nextPlanStart,
+                    PlanEndDate = nextPlanEnd,
+                    MembershipType = newMembershipType,
                     AmountPaid = nextAmountPaid,
                     AmountToPay = nextAmountToPay,
                     PendingAmount = pendingAmount,
-                    PaymentStatus = member.PaymentStatus,
-                    LastPaymentDate = member.LastPaymentDate,
+                    PaymentStatus = nextPaymentStatus,
+                    LastPaymentDate = nextLastPaymentDate,
                     Payment = payment == null
                         ? null
                         : new PaymentTransactionDto
@@ -1303,9 +1309,9 @@ namespace GymManagementBackend.Services
                     throw new InvalidOperationException("Plan duration must be at least 1 month.");
                 }
 
-                if (planDurationMonths.Value > 20)
+                if (planDurationMonths.Value > 24)
                 {
-                    throw new InvalidOperationException("Plan duration cannot exceed 20 months.");
+                    throw new InvalidOperationException("Plan duration cannot exceed 24 months.");
                 }
 
                 // Inclusive plan window: 1 month starting Apr 1 ends Apr 30.

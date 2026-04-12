@@ -29,7 +29,7 @@ namespace GymManagementBackend.DTOs
 
         public DateOnly? PlanEndDate { get; set; }
 
-        [Range(1, 20)]
+        [Range(1, 24)]
         public int? PlanDurationMonths { get; set; }
 
         [StringLength(50)]
@@ -64,7 +64,7 @@ namespace GymManagementBackend.DTOs
         [Required]
         public DateOnly PlanStartDate { get; set; }
 
-        [Range(1, 20)]
+        [Range(1, 24)]
         public int PlanDurationMonths { get; set; } = 1;
 
         public decimal? AmountPaid { get; set; }
@@ -112,7 +112,7 @@ namespace GymManagementBackend.DTOs
         [Required]
         public DateOnly PlanStartDate { get; set; }
 
-        [Range(1, 20)]
+        [Range(1, 24)]
         public int PlanDurationMonths { get; set; } = 1;
 
         [Range(typeof(decimal), "0.01", "9999999999")]
