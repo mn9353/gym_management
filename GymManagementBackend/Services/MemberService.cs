@@ -90,6 +90,12 @@ namespace GymManagementBackend.Services
                 var planEndDate = ResolvePlanEndDate(createMemberDto.PlanStartDate, createMemberDto.PlanDurationMonths, createMemberDto.PlanEndDate);
                 ValidateMembershipDates(createMemberDto.PlanStartDate, planEndDate);
                 var membershipType = ResolveMembershipType(createMemberDto.PlanDurationMonths, createMemberDto.MembershipType);
+                var initialAmountPaid = decimal.Round(createMemberDto.AmountPaid ?? 0m, 2, MidpointRounding.AwayFromZero);
+                if (initialAmountPaid < 0m)
+                {
+                    throw new InvalidOperationException("Amount paid cannot be negative.");
+                }
+                var resolvedPaymentStatus = ResolvePaymentStatus(initialAmountPaid, createMemberDto.AmountToPay);
 
                 var member = new Member
                 {
@@ -103,9 +109,10 @@ namespace GymManagementBackend.Services
                     PlanStartDate = createMemberDto.PlanStartDate,
                     PlanEndDate = planEndDate,
                     MembershipType = membershipType,
-                    AmountPaid = createMemberDto.AmountPaid,
+                    AmountPaid = initialAmountPaid,
                     AmountToPay = createMemberDto.AmountToPay,
-                    PaymentStatus = createMemberDto.PaymentStatus,
+                    PaymentStatus = resolvedPaymentStatus,
+                    LastPaymentDate = initialAmountPaid > 0m ? createMemberDto.JoinDate : null,
                     EmergencyContact = createMemberDto.EmergencyContact?.Trim(),
                     Height = createMemberDto.Height,
                     Weight = createMemberDto.Weight,
@@ -116,8 +123,28 @@ namespace GymManagementBackend.Services
                     Status = ResolveStatusFromPlanEndDate(planEndDate)
                 };
 
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
                 _context.Members.Add(member);
+
+                if (initialAmountPaid > 0m)
+                {
+                    var initialPayment = new Payment
+                    {
+                        GymId = gymId,
+                        MemberId = member.Id,
+                        Amount = initialAmountPaid,
+                        PaymentDate = createMemberDto.JoinDate,
+                        PaymentMode = null,
+                        PlanDurationMonths = createMemberDto.PlanDurationMonths ?? GetPlanDurationMonths(createMemberDto.PlanStartDate, planEndDate),
+                        Remarks = "Initial member payment",
+                        CreatedAt = GetDbTimestampNow()
+                    };
+                    _context.Payments.Add(initialPayment);
+                }
+
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
                 _logger.LogInformation($"Member created: {member.Id}");
                 return MapMemberToDto(member);
