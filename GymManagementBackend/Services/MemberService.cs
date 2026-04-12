@@ -739,7 +739,7 @@ namespace GymManagementBackend.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error getting members list for segment {segment}: {ex.Message}");
+                _logger.LogError(ex, "Error getting members list for segment {Segment}", segment);
                 throw;
             }
         }
@@ -925,14 +925,20 @@ namespace GymManagementBackend.Services
             if (!string.IsNullOrWhiteSpace(filters.SearchTerm))
             {
                 var term = filters.SearchTerm.Trim();
+                var termUpper = term.ToUpperInvariant();
+                var matchActive = "ACTIVE".Contains(termUpper);
+                var matchInactive = "INACTIVE".Contains(termUpper) || "EXPIRED".Contains(termUpper) || "LAPSED".Contains(termUpper);
+                var matchPaused = "PAUSED".Contains(termUpper);
                 query = query.Where(m =>
                     EF.Functions.ILike(m.FullName, $"%{term}%")
                     || (m.Phone != null && EF.Functions.ILike(m.Phone, $"%{term}%"))
                     || (m.Email != null && EF.Functions.ILike(m.Email, $"%{term}%"))
                     || (m.MembershipType != null && EF.Functions.ILike(m.MembershipType, $"%{term}%"))
-                    || EF.Functions.ILike(m.Status, $"%{term}%")
                     || (m.TrainerAssigned != null && EF.Functions.ILike(m.TrainerAssigned, $"%{term}%"))
-                    || (m.LeadSource != null && EF.Functions.ILike(m.LeadSource, $"%{term}%")));
+                    || (m.LeadSource != null && EF.Functions.ILike(m.LeadSource, $"%{term}%"))
+                    || (matchActive && m.Status == "ACTIVE")
+                    || (matchInactive && m.Status == "EXPIRED")
+                    || (matchPaused && m.Status == "PAUSED"));
             }
 
             if (!string.IsNullOrWhiteSpace(filters.FullName))
@@ -962,7 +968,7 @@ namespace GymManagementBackend.Services
             if (!string.IsNullOrWhiteSpace(filters.PaymentStatus))
             {
                 var paymentStatus = filters.PaymentStatus.Trim().ToUpperInvariant();
-                query = query.Where(m => m.PaymentStatus.ToUpper() == paymentStatus);
+                query = query.Where(m => m.PaymentStatus != null && m.PaymentStatus.ToUpper() == paymentStatus);
             }
 
             if (!string.IsNullOrWhiteSpace(filters.MembershipType))
@@ -1049,7 +1055,7 @@ namespace GymManagementBackend.Services
         private static IQueryable<Member> ApplySorting(IQueryable<Member> query, string sortBy, string sortDirection)
         {
             var isDesc = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
-            var field = sortBy.Trim().ToLowerInvariant();
+            var field = string.IsNullOrWhiteSpace(sortBy) ? "planenddate" : sortBy.Trim().ToLowerInvariant();
 
             return (field, isDesc) switch
             {

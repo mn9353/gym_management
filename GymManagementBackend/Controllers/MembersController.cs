@@ -369,7 +369,7 @@ namespace GymManagementBackend.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error getting members list: {ex.Message}");
+                _logger.LogError(ex, "Error getting members list");
                 return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting members list");
             }
         }
