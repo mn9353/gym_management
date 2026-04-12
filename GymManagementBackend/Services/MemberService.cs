@@ -134,6 +134,7 @@ namespace GymManagementBackend.Services
             try
             {
                 var member = await _context.Members
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(m => m.Id == memberId && m.GymId == gymId);
 
                 if (member == null)
@@ -307,17 +308,21 @@ namespace GymManagementBackend.Services
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                member.AmountPaid = nextPaid;
-                member.PaymentStatus = ResolvePaymentStatus(nextPaid, member.AmountToPay);
-                member.LastPaymentDate = paymentDate;
-                member.CreatedAt = EnsureUtc(member.CreatedAt);
-                member.UpdatedAt = GetDbTimestampNow();
-                member.UpdatedAt = EnsureUtc(member.UpdatedAt);
+                var nextPaymentStatus = ResolvePaymentStatus(nextPaid, member.AmountToPay);
+                var updatedAt = EnsureUtc(GetDbTimestampNow());
                 payment.CreatedAt = EnsureUtc(payment.CreatedAt);
 
                 _context.Payments.Add(payment);
-                _context.Members.Update(member);
                 await _context.SaveChangesAsync();
+
+                await _context.Members
+                    .Where(m => m.Id == memberId && m.GymId == gymId)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(m => m.AmountPaid, nextPaid)
+                        .SetProperty(m => m.PaymentStatus, nextPaymentStatus)
+                        .SetProperty(m => m.LastPaymentDate, paymentDate)
+                        .SetProperty(m => m.UpdatedAt, updatedAt));
+
                 await transaction.CommitAsync();
 
                 var pendingAmount = amountToPay > 0m ? Math.Max(0m, amountToPay - nextPaid) : 0m;
@@ -327,8 +332,8 @@ namespace GymManagementBackend.Services
                     AmountPaid = nextPaid,
                     AmountToPay = amountToPay,
                     PendingAmount = pendingAmount,
-                    PaymentStatus = member.PaymentStatus,
-                    LastPaymentDate = member.LastPaymentDate,
+                    PaymentStatus = nextPaymentStatus,
+                    LastPaymentDate = paymentDate,
                     Payment = new PaymentTransactionDto
                     {
                         Id = payment.Id,
@@ -504,7 +509,14 @@ namespace GymManagementBackend.Services
                 }
 
                 if (!string.IsNullOrEmpty(updateMemberDto.MembershipType))
-                    member.MembershipType = updateMemberDto.MembershipType;
+                {
+                    var normalizedMembershipType = NormalizeMembershipTypeValue(updateMemberDto.MembershipType);
+                    if (normalizedMembershipType == null)
+                    {
+                        throw new InvalidOperationException("Membership type must be monthly, quarterly, half_yearly, or yearly.");
+                    }
+                    member.MembershipType = normalizedMembershipType;
+                }
 
                 if (updateMemberDto.AmountPaid.HasValue)
                     member.AmountPaid = updateMemberDto.AmountPaid;
@@ -982,7 +994,11 @@ namespace GymManagementBackend.Services
 
             if (!string.IsNullOrWhiteSpace(filters.MembershipType))
             {
-                var membershipType = filters.MembershipType.Trim();
+                var membershipType = NormalizeMembershipTypeValue(filters.MembershipType);
+                if (membershipType == null)
+                {
+                    return query.Where(_ => false);
+                }
                 query = query.Where(m => m.MembershipType != null && m.MembershipType == membershipType);
             }
 
@@ -1318,14 +1334,33 @@ namespace GymManagementBackend.Services
                 return months switch
                 {
                     >= 12 => "yearly",
-                    >= 6 => "half yearly",
+                    >= 6 => "half_yearly",
                     >= 3 => "quarterly",
                     1 => "monthly",
-                    _ => $"{months} months"
+                    _ => months >= 2 ? "quarterly" : "monthly"
                 };
             }
 
-            return providedMembershipType?.Trim();
+            return NormalizeMembershipTypeValue(providedMembershipType);
+        }
+
+        private static string? NormalizeMembershipTypeValue(string? membershipType)
+        {
+            if (string.IsNullOrWhiteSpace(membershipType))
+            {
+                return null;
+            }
+
+            var normalized = membershipType.Trim().ToLowerInvariant().Replace("-", "_").Replace(" ", "_");
+            return normalized switch
+            {
+                "monthly" => "monthly",
+                "quarterly" => "quarterly",
+                "half_yearly" => "half_yearly",
+                "halfyearly" => "half_yearly",
+                "yearly" => "yearly",
+                _ => null
+            };
         }
 
         private static string? NormalizePaymentMode(string? paymentMode)
