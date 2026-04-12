@@ -235,7 +235,6 @@ namespace GymManagementBackend.Services
                 member.UpdatedAt = GetDbTimestampNow();
 
                 _context.Payments.Add(payment);
-                _context.Members.Update(member);
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
@@ -1409,7 +1408,7 @@ namespace GymManagementBackend.Services
 
         private static DateTime GetDbTimestampNow()
         {
-            return DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+            return DateTime.UtcNow;
         }
 
         private static string ResolveStatusFromPlanEndDate(DateOnly planEndDate)
