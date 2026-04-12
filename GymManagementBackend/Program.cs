@@ -137,6 +137,7 @@ builder.Services.AddScoped<JwtTokenUtil>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IMemberService, MemberService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddHostedService<MembershipStatusSyncBackgroundService>();
 

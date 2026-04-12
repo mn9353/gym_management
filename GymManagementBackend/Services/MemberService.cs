@@ -221,6 +221,7 @@ namespace GymManagementBackend.Services
                     Amount = paymentAmount,
                     PaymentDate = paymentDate,
                     PaymentMode = paymentMode,
+                    PlanDurationMonths = GetPlanDurationMonths(member.PlanStartDate, member.PlanEndDate),
                     Remarks = addPaymentDto.Remarks?.Trim()
                 };
 
@@ -298,6 +299,7 @@ namespace GymManagementBackend.Services
                     Amount = amountPaidNow,
                     PaymentDate = paymentDate,
                     PaymentMode = paymentMode,
+                    PlanDurationMonths = GetPlanDurationMonths(member.PlanStartDate, member.PlanEndDate),
                     Remarks = ownerPaymentUpdateDto.Remarks?.Trim()
                 };
 

@@ -100,6 +100,13 @@ namespace GymManagementBackend.Services
                     .Select(p => (decimal?)p.Amount)
                     .SumAsync()) ?? 0m;
 
+                stats.PendingAmountTotal = (await _context.Members
+                    .Where(m => m.GymId == gymId)
+                    .Select(m => ((m.AmountToPay ?? 0m) - (m.AmountPaid ?? 0m)) > 0m
+                        ? (decimal?)((m.AmountToPay ?? 0m) - (m.AmountPaid ?? 0m))
+                        : 0m)
+                    .SumAsync()) ?? 0m;
+
                 // Expiring in next 7 days (date-driven; paused members are excluded)
                 stats.ExpiringInNext7Days = await _context.Members
                     .CountAsync(m => m.GymId == gymId && 

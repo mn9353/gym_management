@@ -8,6 +8,7 @@ namespace GymManagementBackend.DTOs
         public int NewJoinsLastMonth { get; set; }
         public decimal RevenueThisMonth { get; set; }
         public decimal RevenueLastMonth { get; set; }
+        public decimal PendingAmountTotal { get; set; }
         public int ExpiringInNext7Days { get; set; }
         public int ExpiringThisMonth { get; set; }
         public int ExpiredMembers { get; set; }
