@@ -9,8 +9,9 @@ namespace GymManagementBackend.DTOs
         [StringLength(100)]
         public string FullName { get; set; } = string.Empty;
 
+        [Required]
         [StringLength(15)]
-        public string? Phone { get; set; }
+        public string Phone { get; set; } = string.Empty;
 
         [StringLength(100)]
         [EmailAddress]
