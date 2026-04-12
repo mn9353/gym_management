@@ -159,7 +159,7 @@ namespace GymManagementBackend.Services
                     : paymentStatus;
                 member.LastPaymentDate = paymentDate;
                 member.Status = ResolveStatusFromPlanEndDate(planEndDate);
-                member.UpdatedAt = DateTime.UtcNow;
+                member.UpdatedAt = GetDbTimestampNow();
 
                 var paymentAmount = renewMemberDto.AmountPaid ?? member.AmountPaid ?? 0m;
                 var payment = new Payment
@@ -168,9 +168,10 @@ namespace GymManagementBackend.Services
                     MemberId = member.Id,
                     Amount = paymentAmount,
                     PaymentDate = paymentDate,
-                    PaymentMode = renewMemberDto.PaymentMode?.Trim(),
+                    PaymentMode = NormalizePaymentMode(renewMemberDto.PaymentMode),
                     PlanDurationMonths = renewMemberDto.PlanDurationMonths,
-                    Remarks = renewMemberDto.Remarks?.Trim()
+                    Remarks = renewMemberDto.Remarks?.Trim(),
+                    CreatedAt = GetDbTimestampNow()
                 };
 
                 _context.Payments.Add(payment);
@@ -222,7 +223,8 @@ namespace GymManagementBackend.Services
                     PaymentDate = paymentDate,
                     PaymentMode = paymentMode,
                     PlanDurationMonths = GetPlanDurationMonths(member.PlanStartDate, member.PlanEndDate),
-                    Remarks = addPaymentDto.Remarks?.Trim()
+                    Remarks = addPaymentDto.Remarks?.Trim(),
+                    CreatedAt = GetDbTimestampNow()
                 };
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -230,7 +232,7 @@ namespace GymManagementBackend.Services
                 member.AmountPaid = nextPaid;
                 member.PaymentStatus = paymentStatus;
                 member.LastPaymentDate = paymentDate;
-                member.UpdatedAt = DateTime.UtcNow;
+                member.UpdatedAt = GetDbTimestampNow();
 
                 _context.Payments.Add(payment);
                 _context.Members.Update(member);
@@ -258,7 +260,7 @@ namespace GymManagementBackend.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error adding member payment: {Message}", ex.Message);
+                _logger.LogError(ex, "Error adding member payment");
                 throw;
             }
         }
@@ -300,7 +302,8 @@ namespace GymManagementBackend.Services
                     PaymentDate = paymentDate,
                     PaymentMode = paymentMode,
                     PlanDurationMonths = GetPlanDurationMonths(member.PlanStartDate, member.PlanEndDate),
-                    Remarks = ownerPaymentUpdateDto.Remarks?.Trim()
+                    Remarks = ownerPaymentUpdateDto.Remarks?.Trim(),
+                    CreatedAt = GetDbTimestampNow()
                 };
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -308,7 +311,7 @@ namespace GymManagementBackend.Services
                 member.AmountPaid = nextPaid;
                 member.PaymentStatus = ResolvePaymentStatus(nextPaid, member.AmountToPay);
                 member.LastPaymentDate = paymentDate;
-                member.UpdatedAt = DateTime.UtcNow;
+                member.UpdatedAt = GetDbTimestampNow();
 
                 _context.Payments.Add(payment);
                 _context.Members.Update(member);
@@ -337,7 +340,7 @@ namespace GymManagementBackend.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error updating paid amount with transaction: {Message}", ex.Message);
+                _logger.LogError(ex, "Error updating paid amount with transaction");
                 throw;
             }
         }
@@ -410,7 +413,7 @@ namespace GymManagementBackend.Services
                 {
                     member.LastPaymentDate = paymentDate;
                 }
-                member.UpdatedAt = DateTime.UtcNow;
+                member.UpdatedAt = GetDbTimestampNow();
 
                 Payment? payment = null;
                 if (amountPaidNow > 0m)
@@ -423,7 +426,8 @@ namespace GymManagementBackend.Services
                         PaymentDate = paymentDate,
                         PaymentMode = paymentMode,
                         PlanDurationMonths = ownerRenewMemberDto.PlanDurationMonths,
-                        Remarks = ownerRenewMemberDto.Remarks?.Trim()
+                        Remarks = ownerRenewMemberDto.Remarks?.Trim(),
+                        CreatedAt = GetDbTimestampNow()
                     };
                     _context.Payments.Add(payment);
                 }
@@ -459,7 +463,7 @@ namespace GymManagementBackend.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error renewing member with transaction: {Message}", ex.Message);
+                _logger.LogError(ex, "Error renewing member with transaction");
                 throw;
             }
         }
@@ -532,7 +536,7 @@ namespace GymManagementBackend.Services
                 if (!string.IsNullOrEmpty(updateMemberDto.Notes))
                     member.Notes = updateMemberDto.Notes;
 
-                member.UpdatedAt = DateTime.UtcNow;
+                member.UpdatedAt = GetDbTimestampNow();
                 _context.Members.Update(member);
                 await _context.SaveChangesAsync();
 
@@ -1401,6 +1405,11 @@ namespace GymManagementBackend.Services
         private static string NormalizeEmail(string? email)
         {
             return string.IsNullOrWhiteSpace(email) ? string.Empty : email.Trim().ToLowerInvariant();
+        }
+
+        private static DateTime GetDbTimestampNow()
+        {
+            return DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         }
 
         private static string ResolveStatusFromPlanEndDate(DateOnly planEndDate)
