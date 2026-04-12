@@ -91,9 +91,14 @@ namespace GymManagementBackend.Services
                 ValidateMembershipDates(createMemberDto.PlanStartDate, planEndDate);
                 var membershipType = ResolveMembershipType(createMemberDto.PlanDurationMonths, createMemberDto.MembershipType);
                 var initialAmountPaid = decimal.Round(createMemberDto.AmountPaid ?? 0m, 2, MidpointRounding.AwayFromZero);
+                var initialPaymentMode = NormalizePaymentMode(createMemberDto.PaymentMode);
                 if (initialAmountPaid < 0m)
                 {
                     throw new InvalidOperationException("Amount paid cannot be negative.");
+                }
+                if (initialAmountPaid > 0m && string.IsNullOrWhiteSpace(initialPaymentMode))
+                {
+                    throw new InvalidOperationException("Payment mode is required when amount paid is greater than 0.");
                 }
                 var resolvedPaymentStatus = ResolvePaymentStatus(initialAmountPaid, createMemberDto.AmountToPay);
 
@@ -135,7 +140,7 @@ namespace GymManagementBackend.Services
                         MemberId = member.Id,
                         Amount = initialAmountPaid,
                         PaymentDate = createMemberDto.JoinDate,
-                        PaymentMode = null,
+                        PaymentMode = initialPaymentMode,
                         PlanDurationMonths = createMemberDto.PlanDurationMonths ?? GetPlanDurationMonths(createMemberDto.PlanStartDate, planEndDate),
                         Remarks = "Initial member payment",
                         CreatedAt = GetDbTimestampNow()

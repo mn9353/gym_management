@@ -42,6 +42,9 @@ namespace GymManagementBackend.DTOs
         [StringLength(20)]
         public string PaymentStatus { get; set; } = "PENDING";
 
+        [StringLength(20)]
+        public string? PaymentMode { get; set; }
+
         [StringLength(15)]
         public string? EmergencyContact { get; set; }
 
