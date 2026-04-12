@@ -102,7 +102,7 @@ namespace GymManagementBackend.Services
                     JoinDate = createMemberDto.JoinDate,
                     PlanStartDate = createMemberDto.PlanStartDate,
                     PlanEndDate = planEndDate,
-                    MembershipType = null,
+                    MembershipType = membershipType,
                     AmountPaid = createMemberDto.AmountPaid,
                     AmountToPay = createMemberDto.AmountToPay,
                     PaymentStatus = createMemberDto.PaymentStatus,
@@ -118,8 +118,6 @@ namespace GymManagementBackend.Services
 
                 _context.Members.Add(member);
                 await _context.SaveChangesAsync();
-                await SetMembershipTypeAsync(member.Id, membershipType);
-                member.MembershipType = membershipType;
 
                 _logger.LogInformation($"Member created: {member.Id}");
                 return MapMemberToDto(member);
@@ -153,6 +151,7 @@ namespace GymManagementBackend.Services
 
                 member.PlanStartDate = renewMemberDto.PlanStartDate;
                 member.PlanEndDate = planEndDate;
+                member.MembershipType = membershipType;
                 member.AmountPaid = renewMemberDto.AmountPaid ?? member.AmountPaid;
                 member.AmountToPay = renewMemberDto.AmountToPay ?? member.AmountToPay;
                 member.PaymentStatus = string.IsNullOrWhiteSpace(renewMemberDto.PaymentStatus)
@@ -177,8 +176,6 @@ namespace GymManagementBackend.Services
 
                 _context.Payments.Add(payment);
                 await _context.SaveChangesAsync();
-                await SetMembershipTypeAsync(member.Id, membershipType);
-                member.MembershipType = membershipType;
 
                 _logger.LogInformation("Member renewed: {MemberId}", memberId);
                 return MapMemberToDto(member);
@@ -494,8 +491,6 @@ namespace GymManagementBackend.Services
                     throw new KeyNotFoundException($"Member not found");
                 }
 
-                string? pendingMembershipType = null;
-
                 if (!string.IsNullOrEmpty(updateMemberDto.FullName))
                     member.FullName = updateMemberDto.FullName;
 
@@ -524,7 +519,7 @@ namespace GymManagementBackend.Services
                     {
                         throw new InvalidOperationException("Membership type must be monthly, quarterly, half_yearly, or yearly.");
                     }
-                    pendingMembershipType = normalizedMembershipType;
+                    member.MembershipType = normalizedMembershipType;
                 }
 
                 if (updateMemberDto.AmountPaid.HasValue)
@@ -561,11 +556,6 @@ namespace GymManagementBackend.Services
 
                 member.UpdatedAt = GetDbTimestampNow();
                 await _context.SaveChangesAsync();
-                if (pendingMembershipType is not null)
-                {
-                    await SetMembershipTypeAsync(member.Id, pendingMembershipType);
-                    member.MembershipType = pendingMembershipType;
-                }
 
                 _logger.LogInformation($"Member updated: {memberId}");
                 return MapMemberToDto(member);
@@ -1374,23 +1364,6 @@ namespace GymManagementBackend.Services
                 "yearly" => "yearly",
                 _ => null
             };
-        }
-
-        private async Task SetMembershipTypeAsync(Guid memberId, string? membershipType)
-        {
-            if (string.IsNullOrWhiteSpace(membershipType))
-            {
-                await _context.Database.ExecuteSqlInterpolatedAsync($@"
-                    UPDATE public.members
-                    SET membership_type = NULL
-                    WHERE id = {memberId}");
-                return;
-            }
-
-            await _context.Database.ExecuteSqlInterpolatedAsync($@"
-                UPDATE public.members
-                SET membership_type = CAST({membershipType} AS ""membershipType"")
-                WHERE id = {memberId}");
         }
 
         private static string? NormalizePaymentMode(string? paymentMode)
