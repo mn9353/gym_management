@@ -134,6 +134,7 @@ namespace GymManagementBackend.Services
             try
             {
                 var member = await _context.Members
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(m => m.Id == memberId && m.GymId == gymId);
 
                 if (member == null)
@@ -159,7 +160,7 @@ namespace GymManagementBackend.Services
                     : paymentStatus;
                 member.LastPaymentDate = paymentDate;
                 member.Status = ResolveStatusFromPlanEndDate(planEndDate);
-                member.UpdatedAt = DateTime.UtcNow;
+                member.UpdatedAt = GetDbTimestampNow();
 
                 var paymentAmount = renewMemberDto.AmountPaid ?? member.AmountPaid ?? 0m;
                 var payment = new Payment
@@ -168,9 +169,10 @@ namespace GymManagementBackend.Services
                     MemberId = member.Id,
                     Amount = paymentAmount,
                     PaymentDate = paymentDate,
-                    PaymentMode = renewMemberDto.PaymentMode?.Trim(),
+                    PaymentMode = NormalizePaymentMode(renewMemberDto.PaymentMode),
                     PlanDurationMonths = renewMemberDto.PlanDurationMonths,
-                    Remarks = renewMemberDto.Remarks?.Trim()
+                    Remarks = renewMemberDto.Remarks?.Trim(),
+                    CreatedAt = GetDbTimestampNow()
                 };
 
                 _context.Payments.Add(payment);
@@ -222,7 +224,8 @@ namespace GymManagementBackend.Services
                     PaymentDate = paymentDate,
                     PaymentMode = paymentMode,
                     PlanDurationMonths = GetPlanDurationMonths(member.PlanStartDate, member.PlanEndDate),
-                    Remarks = addPaymentDto.Remarks?.Trim()
+                    Remarks = addPaymentDto.Remarks?.Trim(),
+                    CreatedAt = GetDbTimestampNow()
                 };
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -230,10 +233,9 @@ namespace GymManagementBackend.Services
                 member.AmountPaid = nextPaid;
                 member.PaymentStatus = paymentStatus;
                 member.LastPaymentDate = paymentDate;
-                member.UpdatedAt = DateTime.UtcNow;
+                member.UpdatedAt = GetDbTimestampNow();
 
                 _context.Payments.Add(payment);
-                _context.Members.Update(member);
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
@@ -258,7 +260,7 @@ namespace GymManagementBackend.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error adding member payment: {Message}", ex.Message);
+                _logger.LogError(ex, "Error adding member payment");
                 throw;
             }
         }
@@ -300,19 +302,27 @@ namespace GymManagementBackend.Services
                     PaymentDate = paymentDate,
                     PaymentMode = paymentMode,
                     PlanDurationMonths = GetPlanDurationMonths(member.PlanStartDate, member.PlanEndDate),
-                    Remarks = ownerPaymentUpdateDto.Remarks?.Trim()
+                    Remarks = ownerPaymentUpdateDto.Remarks?.Trim(),
+                    CreatedAt = GetDbTimestampNow()
                 };
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                member.AmountPaid = nextPaid;
-                member.PaymentStatus = ResolvePaymentStatus(nextPaid, member.AmountToPay);
-                member.LastPaymentDate = paymentDate;
-                member.UpdatedAt = DateTime.UtcNow;
+                var nextPaymentStatus = ResolvePaymentStatus(nextPaid, member.AmountToPay);
+                var updatedAt = EnsureUtc(GetDbTimestampNow());
+                payment.CreatedAt = EnsureUtc(payment.CreatedAt);
 
                 _context.Payments.Add(payment);
-                _context.Members.Update(member);
                 await _context.SaveChangesAsync();
+
+                await _context.Members
+                    .Where(m => m.Id == memberId && m.GymId == gymId)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(m => m.AmountPaid, nextPaid)
+                        .SetProperty(m => m.PaymentStatus, nextPaymentStatus)
+                        .SetProperty(m => m.LastPaymentDate, paymentDate)
+                        .SetProperty(m => m.UpdatedAt, updatedAt));
+
                 await transaction.CommitAsync();
 
                 var pendingAmount = amountToPay > 0m ? Math.Max(0m, amountToPay - nextPaid) : 0m;
@@ -322,8 +332,8 @@ namespace GymManagementBackend.Services
                     AmountPaid = nextPaid,
                     AmountToPay = amountToPay,
                     PendingAmount = pendingAmount,
-                    PaymentStatus = member.PaymentStatus,
-                    LastPaymentDate = member.LastPaymentDate,
+                    PaymentStatus = nextPaymentStatus,
+                    LastPaymentDate = paymentDate,
                     Payment = new PaymentTransactionDto
                     {
                         Id = payment.Id,
@@ -337,7 +347,7 @@ namespace GymManagementBackend.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error updating paid amount with transaction: {Message}", ex.Message);
+                _logger.LogError(ex, "Error updating paid amount with transaction");
                 throw;
             }
         }
@@ -410,7 +420,7 @@ namespace GymManagementBackend.Services
                 {
                     member.LastPaymentDate = paymentDate;
                 }
-                member.UpdatedAt = DateTime.UtcNow;
+                member.UpdatedAt = GetDbTimestampNow();
 
                 Payment? payment = null;
                 if (amountPaidNow > 0m)
@@ -423,7 +433,8 @@ namespace GymManagementBackend.Services
                         PaymentDate = paymentDate,
                         PaymentMode = paymentMode,
                         PlanDurationMonths = ownerRenewMemberDto.PlanDurationMonths,
-                        Remarks = ownerRenewMemberDto.Remarks?.Trim()
+                        Remarks = ownerRenewMemberDto.Remarks?.Trim(),
+                        CreatedAt = GetDbTimestampNow()
                     };
                     _context.Payments.Add(payment);
                 }
@@ -459,7 +470,7 @@ namespace GymManagementBackend.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error renewing member with transaction: {Message}", ex.Message);
+                _logger.LogError(ex, "Error renewing member with transaction");
                 throw;
             }
         }
@@ -498,7 +509,14 @@ namespace GymManagementBackend.Services
                 }
 
                 if (!string.IsNullOrEmpty(updateMemberDto.MembershipType))
-                    member.MembershipType = updateMemberDto.MembershipType;
+                {
+                    var normalizedMembershipType = NormalizeMembershipTypeValue(updateMemberDto.MembershipType);
+                    if (normalizedMembershipType == null)
+                    {
+                        throw new InvalidOperationException("Membership type must be monthly, quarterly, half_yearly, or yearly.");
+                    }
+                    member.MembershipType = normalizedMembershipType;
+                }
 
                 if (updateMemberDto.AmountPaid.HasValue)
                     member.AmountPaid = updateMemberDto.AmountPaid;
@@ -532,7 +550,7 @@ namespace GymManagementBackend.Services
                 if (!string.IsNullOrEmpty(updateMemberDto.Notes))
                     member.Notes = updateMemberDto.Notes;
 
-                member.UpdatedAt = DateTime.UtcNow;
+                member.UpdatedAt = GetDbTimestampNow();
                 _context.Members.Update(member);
                 await _context.SaveChangesAsync();
 
@@ -976,7 +994,11 @@ namespace GymManagementBackend.Services
 
             if (!string.IsNullOrWhiteSpace(filters.MembershipType))
             {
-                var membershipType = filters.MembershipType.Trim();
+                var membershipType = NormalizeMembershipTypeValue(filters.MembershipType);
+                if (membershipType == null)
+                {
+                    return query.Where(_ => false);
+                }
                 query = query.Where(m => m.MembershipType != null && m.MembershipType == membershipType);
             }
 
@@ -1312,14 +1334,33 @@ namespace GymManagementBackend.Services
                 return months switch
                 {
                     >= 12 => "yearly",
-                    >= 6 => "half yearly",
+                    >= 6 => "half_yearly",
                     >= 3 => "quarterly",
                     1 => "monthly",
-                    _ => $"{months} months"
+                    _ => months >= 2 ? "quarterly" : "monthly"
                 };
             }
 
-            return providedMembershipType?.Trim();
+            return NormalizeMembershipTypeValue(providedMembershipType);
+        }
+
+        private static string? NormalizeMembershipTypeValue(string? membershipType)
+        {
+            if (string.IsNullOrWhiteSpace(membershipType))
+            {
+                return null;
+            }
+
+            var normalized = membershipType.Trim().ToLowerInvariant().Replace("-", "_").Replace(" ", "_");
+            return normalized switch
+            {
+                "monthly" => "monthly",
+                "quarterly" => "quarterly",
+                "half_yearly" => "half_yearly",
+                "halfyearly" => "half_yearly",
+                "yearly" => "yearly",
+                _ => null
+            };
         }
 
         private static string? NormalizePaymentMode(string? paymentMode)
@@ -1401,6 +1442,18 @@ namespace GymManagementBackend.Services
         private static string NormalizeEmail(string? email)
         {
             return string.IsNullOrWhiteSpace(email) ? string.Empty : email.Trim().ToLowerInvariant();
+        }
+
+        private static DateTime GetDbTimestampNow()
+        {
+            return DateTime.UtcNow;
+        }
+
+        private static DateTime EnsureUtc(DateTime value)
+        {
+            return value.Kind == DateTimeKind.Utc
+                ? value
+                : DateTime.SpecifyKind(value, DateTimeKind.Utc);
         }
 
         private static string ResolveStatusFromPlanEndDate(DateOnly planEndDate)

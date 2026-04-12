@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using GymManagementBackend.DTOs;
 using GymManagementBackend.Extensions;
 using GymManagementBackend.Services;
+using Npgsql;
 
 namespace GymManagementBackend.Controllers
 {
@@ -244,10 +246,36 @@ namespace GymManagementBackend.Controllers
             {
                 return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
             }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg)
+            {
+                _logger.LogError(ex, "DB error updating paid amount with transaction");
+                return this.ApiError(
+                    StatusCodes.Status500InternalServerError,
+                    "MEMBER_PAYMENT_UPDATE_ERROR",
+                    ex.Message,
+                    new
+                    {
+                        sqlState = pg.SqlState,
+                        detail = pg.Detail,
+                        constraint = pg.ConstraintName,
+                        table = pg.TableName,
+                        column = pg.ColumnName,
+                        inner = ex.InnerException?.Message
+                    });
+            }
             catch (Exception ex)
             {
-                _logger.LogError($"Error updating paid amount with transaction: {ex.Message}");
-                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBER_PAYMENT_UPDATE_ERROR", ex.Message);
+                _logger.LogError(ex, "Error updating paid amount with transaction");
+                return this.ApiError(
+                    StatusCodes.Status500InternalServerError,
+                    "MEMBER_PAYMENT_UPDATE_ERROR",
+                    ex.Message,
+                    new
+                    {
+                        inner = ex.InnerException?.Message,
+                        type = ex.GetType().Name,
+                        innerType = ex.InnerException?.GetType().Name
+                    });
             }
         }
 
