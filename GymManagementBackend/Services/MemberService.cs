@@ -817,11 +817,17 @@ namespace GymManagementBackend.Services
                 if (!string.IsNullOrWhiteSpace(request.SearchText))
                 {
                     var term = request.SearchText.Trim();
+                    var termUpper = term.ToUpperInvariant();
+                    var matchActive = "ACTIVE".Contains(termUpper);
+                    var matchInactive = "INACTIVE".Contains(termUpper) || "EXPIRED".Contains(termUpper) || "LAPSED".Contains(termUpper);
+                    var matchPaused = "PAUSED".Contains(termUpper);
                     query = query.Where(m =>
                         EF.Functions.ILike(m.FullName, $"%{term}%")
                         || (m.Phone != null && EF.Functions.ILike(m.Phone, $"%{term}%"))
                         || (m.Email != null && EF.Functions.ILike(m.Email, $"%{term}%"))
-                        || (m.MembershipType != null && EF.Functions.ILike(m.MembershipType, $"%{term}%")));
+                        || (matchActive && m.Status == "ACTIVE")
+                        || (matchInactive && m.Status == "EXPIRED")
+                        || (matchPaused && m.Status == "PAUSED"));
                 }
 
                 var totalCount = await query.CountAsync();
@@ -933,9 +939,6 @@ namespace GymManagementBackend.Services
                     EF.Functions.ILike(m.FullName, $"%{term}%")
                     || (m.Phone != null && EF.Functions.ILike(m.Phone, $"%{term}%"))
                     || (m.Email != null && EF.Functions.ILike(m.Email, $"%{term}%"))
-                    || (m.MembershipType != null && EF.Functions.ILike(m.MembershipType, $"%{term}%"))
-                    || (m.TrainerAssigned != null && EF.Functions.ILike(m.TrainerAssigned, $"%{term}%"))
-                    || (m.LeadSource != null && EF.Functions.ILike(m.LeadSource, $"%{term}%"))
                     || (matchActive && m.Status == "ACTIVE")
                     || (matchInactive && m.Status == "EXPIRED")
                     || (matchPaused && m.Status == "PAUSED"));
@@ -974,7 +977,7 @@ namespace GymManagementBackend.Services
             if (!string.IsNullOrWhiteSpace(filters.MembershipType))
             {
                 var membershipType = filters.MembershipType.Trim();
-                query = query.Where(m => m.MembershipType != null && EF.Functions.ILike(m.MembershipType, $"%{membershipType}%"));
+                query = query.Where(m => m.MembershipType != null && m.MembershipType == membershipType);
             }
 
             if (!string.IsNullOrWhiteSpace(filters.TrainerAssigned))
