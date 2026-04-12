@@ -250,7 +250,7 @@ namespace GymManagementBackend.Controllers
             catch (Exception ex)
             {
                 _logger.LogError($"Error updating paid amount with transaction: {ex.Message}");
-                return StatusCode(500, new { message = "Error updating paid amount with transaction" });
+                return StatusCode(500, new { message = ex.Message });
             }
         }
 
@@ -278,7 +278,7 @@ namespace GymManagementBackend.Controllers
             catch (Exception ex)
             {
                 _logger.LogError($"Error renewing member with transaction: {ex.Message}");
-                return StatusCode(500, new { message = "Error renewing member with transaction" });
+                return StatusCode(500, new { message = ex.Message });
             }
         }
 

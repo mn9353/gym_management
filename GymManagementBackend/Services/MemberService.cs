@@ -352,15 +352,8 @@ namespace GymManagementBackend.Services
                     throw new KeyNotFoundException("Member not found");
                 }
 
-                var minimumStartDate = member.PlanEndDate.AddDays(1);
-                if (ownerRenewMemberDto.PlanStartDate < minimumStartDate)
-                {
-                    throw new InvalidOperationException($"Renewal start date must be on or after {minimumStartDate:yyyy-MM-dd}.");
-                }
-
-                var newPlanEndDate = ResolvePlanEndDate(ownerRenewMemberDto.PlanStartDate, ownerRenewMemberDto.PlanDurationMonths, null);
-                ValidateMembershipDates(ownerRenewMemberDto.PlanStartDate, newPlanEndDate);
-                var newMembershipType = ResolveMembershipType(ownerRenewMemberDto.PlanDurationMonths, null);
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var isExpand = member.PlanEndDate >= today;
 
                 var amountToPayIncrement = decimal.Round(ownerRenewMemberDto.AmountToPayIncrement, 2, MidpointRounding.AwayFromZero);
                 var amountPaidNow = decimal.Round(ownerRenewMemberDto.AmountPaidNow, 2, MidpointRounding.AwayFromZero);
@@ -375,18 +368,42 @@ namespace GymManagementBackend.Services
 
                 var paymentDate = ownerRenewMemberDto.PaymentDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
                 var paymentMode = NormalizePaymentMode(ownerRenewMemberDto.PaymentMode);
-                var nextAmountToPay = (member.AmountToPay ?? 0m) + amountToPayIncrement;
-                var nextAmountPaid = (member.AmountPaid ?? 0m) + amountPaidNow;
+
+                DateOnly nextPlanStart;
+                DateOnly nextPlanEnd;
+                decimal nextAmountToPay;
+                decimal nextAmountPaid;
+
+                if (isExpand)
+                {
+                    var extensionStart = member.PlanEndDate.AddDays(1);
+                    nextPlanStart = member.PlanStartDate;
+                    nextPlanEnd = ResolvePlanEndDate(extensionStart, ownerRenewMemberDto.PlanDurationMonths, null);
+                    nextAmountToPay = (member.AmountToPay ?? 0m) + amountToPayIncrement;
+                    nextAmountPaid = (member.AmountPaid ?? 0m) + amountPaidNow;
+                }
+                else
+                {
+                    var selectedStart = ownerRenewMemberDto.PlanStartDate < today ? today : ownerRenewMemberDto.PlanStartDate;
+                    nextPlanStart = selectedStart;
+                    nextPlanEnd = ResolvePlanEndDate(selectedStart, ownerRenewMemberDto.PlanDurationMonths, null);
+                    nextAmountToPay = amountToPayIncrement;
+                    nextAmountPaid = amountPaidNow;
+                }
+
+                ValidateMembershipDates(nextPlanStart, nextPlanEnd);
+                var totalMonths = GetPlanDurationMonths(nextPlanStart, nextPlanEnd);
+                var newMembershipType = ResolveMembershipType(totalMonths, null);
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                member.PlanStartDate = ownerRenewMemberDto.PlanStartDate;
-                member.PlanEndDate = newPlanEndDate;
+                member.PlanStartDate = nextPlanStart;
+                member.PlanEndDate = nextPlanEnd;
                 member.MembershipType = newMembershipType;
                 member.AmountToPay = nextAmountToPay;
                 member.AmountPaid = nextAmountPaid;
                 member.PaymentStatus = ResolvePaymentStatus(nextAmountPaid, nextAmountToPay);
-                member.Status = ResolveStatusFromPlanEndDate(newPlanEndDate);
+                member.Status = ResolveStatusFromPlanEndDate(nextPlanEnd);
                 if (amountPaidNow > 0m)
                 {
                     member.LastPaymentDate = paymentDate;
@@ -1268,6 +1285,12 @@ namespace GymManagementBackend.Services
             }
 
             return planEndDate.Value;
+        }
+
+        private static int GetPlanDurationMonths(DateOnly planStartDate, DateOnly planEndDate)
+        {
+            var months = (planEndDate.Year - planStartDate.Year) * 12 + (planEndDate.Month - planStartDate.Month) + 1;
+            return Math.Max(1, months);
         }
 
         private static string? ResolveMembershipType(int? planDurationMonths, string? providedMembershipType)
