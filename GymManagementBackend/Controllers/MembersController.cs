@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using GymManagementBackend.DTOs;
 using GymManagementBackend.Extensions;
@@ -31,12 +32,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting members: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting members" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting members");
             }
         }
 
@@ -51,16 +52,16 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { message = "Member not found" });
+                return this.ApiError(StatusCodes.Status404NotFound, "MEMBER_NOT_FOUND", "Member not found");
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting member: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting member" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting member");
             }
         }
 
@@ -75,24 +76,20 @@ namespace GymManagementBackend.Controllers
             }
             catch (DuplicateMemberException ex)
             {
-                return Conflict(new
-                {
-                    message = ex.Message,
-                    existingMember = ex.ExistingMember
-                });
+                return this.ApiError(StatusCodes.Status409Conflict, "DUPLICATE_MEMBER", ex.Message, new { existingMember = ex.ExistingMember });
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error creating member: {ex.Message}");
-                return StatusCode(500, new { message = "Error creating member" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error creating member");
             }
         }
 
@@ -107,20 +104,20 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { message = "Member not found" });
+                return this.ApiError(StatusCodes.Status404NotFound, "MEMBER_NOT_FOUND", "Member not found");
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error updating member: {ex.Message}");
-                return StatusCode(500, new { message = "Error updating member" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error updating member");
             }
         }
 
@@ -134,19 +131,19 @@ namespace GymManagementBackend.Controllers
                 
                 if (!result)
                 {
-                    return NotFound(new { message = "Member not found" });
+                    return this.ApiError(StatusCodes.Status404NotFound, "MEMBER_NOT_FOUND", "Member not found");
                 }
 
                 return Ok(new { message = "Member deleted successfully" });
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error deleting member: {ex.Message}");
-                return StatusCode(500, new { message = "Error deleting member" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error deleting member");
             }
         }
 
@@ -161,12 +158,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error searching members: {ex.Message}");
-                return StatusCode(500, new { message = "Error searching members" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error searching members");
             }
         }
 
@@ -181,20 +178,20 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { message = "Member not found" });
+                return this.ApiError(StatusCodes.Status404NotFound, "MEMBER_NOT_FOUND", "Member not found");
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error renewing member: {ex.Message}");
-                return StatusCode(500, new { message = "Error renewing member" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error renewing member");
             }
         }
 
@@ -209,20 +206,20 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { message = "Member not found" });
+                return this.ApiError(StatusCodes.Status404NotFound, "MEMBER_NOT_FOUND", "Member not found");
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error adding member payment: {ex.Message}");
-                return StatusCode(500, new { message = "Error adding member payment" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error adding member payment");
             }
         }
 
@@ -237,20 +234,20 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { message = "Member not found" });
+                return this.ApiError(StatusCodes.Status404NotFound, "MEMBER_NOT_FOUND", "Member not found");
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error updating paid amount with transaction: {ex.Message}");
-                return StatusCode(500, new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBER_PAYMENT_UPDATE_ERROR", ex.Message);
             }
         }
 
@@ -265,20 +262,20 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { message = "Member not found" });
+                return this.ApiError(StatusCodes.Status404NotFound, "MEMBER_NOT_FOUND", "Member not found");
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error renewing member with transaction: {ex.Message}");
-                return StatusCode(500, new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBER_RENEWAL_ERROR", ex.Message);
             }
         }
 
@@ -297,12 +294,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting upcoming renewals: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting upcoming renewals" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting upcoming renewals");
             }
         }
 
@@ -319,12 +316,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting segment counts: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting segment counts" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting segment counts");
             }
         }
 
@@ -339,12 +336,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting active members list: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting active members list" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting active members list");
             }
         }
 
@@ -368,12 +365,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting members list: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting members list" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting members list");
             }
         }
 
@@ -388,12 +385,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting inactive members list: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting inactive members list" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting inactive members list");
             }
         }
 
@@ -408,12 +405,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting upcoming renewals list: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting upcoming renewals list" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting upcoming renewals list");
             }
         }
 
@@ -428,12 +425,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting active members grid: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting active members grid" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting active members grid");
             }
         }
 
@@ -448,12 +445,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting inactive members grid: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting inactive members grid" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting inactive members grid");
             }
         }
 
@@ -468,12 +465,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting upcoming renewals grid: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting upcoming renewals grid" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error getting upcoming renewals grid");
             }
         }
 
@@ -497,3 +494,5 @@ namespace GymManagementBackend.Controllers
         }
     }
 }
+
+

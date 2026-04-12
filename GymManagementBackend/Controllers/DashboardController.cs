@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using GymManagementBackend.DTOs;
 using GymManagementBackend.Extensions;
@@ -31,12 +32,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting dashboard stats: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting dashboard stats" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "DASHBOARD_STATS_ERROR", "Error getting dashboard stats");
             }
         }
 
@@ -51,12 +52,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting dashboard overview: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting dashboard overview" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "DASHBOARD_OVERVIEW_ERROR", "Error getting dashboard overview");
             }
         }
 
@@ -71,12 +72,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting trends: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting trends" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "DASHBOARD_TRENDS_ERROR", "Error getting trends");
             }
         }
 
@@ -91,12 +92,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting recent members: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting recent members" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "DASHBOARD_RECENT_MEMBERS_ERROR", "Error getting recent members");
             }
         }
 
@@ -130,12 +131,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting revenue trends: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting revenue trends" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "REVENUE_TRENDS_ERROR", "Error getting revenue trends");
             }
         }
 
@@ -150,12 +151,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting member flow: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting member flow" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBER_FLOW_ERROR", "Error getting member flow");
             }
         }
 
@@ -170,12 +171,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error getting weekly growth: {ex.Message}");
-                return StatusCode(500, new { message = "Error getting weekly growth" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "WEEKLY_GROWTH_ERROR", "Error getting weekly growth");
             }
         }
     }

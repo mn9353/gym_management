@@ -2,6 +2,7 @@ using GymManagementBackend.DTOs;
 using GymManagementBackend.Extensions;
 using GymManagementBackend.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GymManagementBackend.Controllers
@@ -31,12 +32,12 @@ namespace GymManagementBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError("Error getting payments list: {Message}", ex.Message);
-                return StatusCode(500, new { message = "Error getting payments list" });
+                return this.ApiError(StatusCodes.Status500InternalServerError, "PAYMENTS_LIST_ERROR", "Error getting payments list");
             }
         }
 
@@ -60,4 +61,3 @@ namespace GymManagementBackend.Controllers
         }
     }
 }
-
