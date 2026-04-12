@@ -9,8 +9,9 @@ namespace GymManagementBackend.DTOs
         [StringLength(100)]
         public string FullName { get; set; } = string.Empty;
 
+        [Required]
         [StringLength(15)]
-        public string? Phone { get; set; }
+        public string Phone { get; set; } = string.Empty;
 
         [StringLength(100)]
         [EmailAddress]
@@ -29,7 +30,7 @@ namespace GymManagementBackend.DTOs
 
         public DateOnly? PlanEndDate { get; set; }
 
-        [Range(1, 20)]
+        [Range(1, 24)]
         public int? PlanDurationMonths { get; set; }
 
         [StringLength(50)]
@@ -40,6 +41,9 @@ namespace GymManagementBackend.DTOs
 
         [StringLength(20)]
         public string PaymentStatus { get; set; } = "PENDING";
+
+        [StringLength(20)]
+        public string? PaymentMode { get; set; }
 
         [StringLength(15)]
         public string? EmergencyContact { get; set; }
@@ -64,7 +68,7 @@ namespace GymManagementBackend.DTOs
         [Required]
         public DateOnly PlanStartDate { get; set; }
 
-        [Range(1, 20)]
+        [Range(1, 24)]
         public int PlanDurationMonths { get; set; } = 1;
 
         public decimal? AmountPaid { get; set; }
@@ -112,7 +116,7 @@ namespace GymManagementBackend.DTOs
         [Required]
         public DateOnly PlanStartDate { get; set; }
 
-        [Range(1, 20)]
+        [Range(1, 24)]
         public int PlanDurationMonths { get; set; } = 1;
 
         [Range(typeof(decimal), "0.01", "9999999999")]

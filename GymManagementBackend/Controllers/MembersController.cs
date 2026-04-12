@@ -88,10 +88,36 @@ namespace GymManagementBackend.Controllers
             {
                 return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
             }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg)
+            {
+                _logger.LogError(ex, "DB error creating member");
+                return this.ApiError(
+                    StatusCodes.Status500InternalServerError,
+                    "MEMBERS_ERROR",
+                    "Error creating member",
+                    new
+                    {
+                        sqlState = pg.SqlState,
+                        detail = pg.Detail,
+                        constraint = pg.ConstraintName,
+                        table = pg.TableName,
+                        column = pg.ColumnName,
+                        inner = ex.InnerException?.Message
+                    });
+            }
             catch (Exception ex)
             {
                 _logger.LogError($"Error creating member: {ex.Message}");
-                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error creating member");
+                return this.ApiError(
+                    StatusCodes.Status500InternalServerError,
+                    "MEMBERS_ERROR",
+                    "Error creating member",
+                    new
+                    {
+                        inner = ex.InnerException?.Message,
+                        type = ex.GetType().Name,
+                        innerType = ex.InnerException?.GetType().Name
+                    });
             }
         }
 
@@ -299,6 +325,23 @@ namespace GymManagementBackend.Controllers
             catch (InvalidOperationException ex)
             {
                 return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg)
+            {
+                _logger.LogError(ex, "DB error renewing member with transaction");
+                return this.ApiError(
+                    StatusCodes.Status500InternalServerError,
+                    "MEMBER_RENEWAL_ERROR",
+                    ex.Message,
+                    new
+                    {
+                        sqlState = pg.SqlState,
+                        detail = pg.Detail,
+                        constraint = pg.ConstraintName,
+                        table = pg.TableName,
+                        column = pg.ColumnName,
+                        inner = ex.InnerException?.Message
+                    });
             }
             catch (Exception ex)
             {
