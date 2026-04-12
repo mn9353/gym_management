@@ -310,7 +310,10 @@ namespace GymManagementBackend.Services
                 member.AmountPaid = nextPaid;
                 member.PaymentStatus = ResolvePaymentStatus(nextPaid, member.AmountToPay);
                 member.LastPaymentDate = paymentDate;
+                member.CreatedAt = EnsureUtc(member.CreatedAt);
                 member.UpdatedAt = GetDbTimestampNow();
+                member.UpdatedAt = EnsureUtc(member.UpdatedAt);
+                payment.CreatedAt = EnsureUtc(payment.CreatedAt);
 
                 _context.Payments.Add(payment);
                 _context.Members.Update(member);
@@ -1409,6 +1412,13 @@ namespace GymManagementBackend.Services
         private static DateTime GetDbTimestampNow()
         {
             return DateTime.UtcNow;
+        }
+
+        private static DateTime EnsureUtc(DateTime value)
+        {
+            return value.Kind == DateTimeKind.Utc
+                ? value
+                : DateTime.SpecifyKind(value, DateTimeKind.Utc);
         }
 
         private static string ResolveStatusFromPlanEndDate(DateOnly planEndDate)
