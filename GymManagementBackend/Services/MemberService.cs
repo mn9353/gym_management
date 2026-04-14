@@ -1357,8 +1357,22 @@ namespace GymManagementBackend.Services
 
         private static int GetPlanDurationMonths(DateOnly planStartDate, DateOnly planEndDate)
         {
-            var months = (planEndDate.Year - planStartDate.Year) * 12 + (planEndDate.Month - planStartDate.Month) + 1;
-            return Math.Max(1, months);
+            if (planEndDate < planStartDate)
+            {
+                return 1;
+            }
+
+            for (var months = 1; months <= 24; months++)
+            {
+                var computedEnd = planStartDate.AddMonths(months).AddDays(-1);
+                if (computedEnd == planEndDate)
+                {
+                    return months;
+                }
+            }
+
+            var inclusiveDays = (planEndDate.DayNumber - planStartDate.DayNumber) + 1;
+            return Math.Max(1, (int)Math.Round(inclusiveDays / 30.0, MidpointRounding.AwayFromZero));
         }
 
         private static string? ResolveMembershipType(int? planDurationMonths, string? providedMembershipType)
