@@ -156,9 +156,22 @@ namespace GymManagementBackend.Services
 
         private static int GetPlanMonths(DateOnly start, DateOnly end)
         {
-            var months = (end.Year - start.Year) * 12 + (end.Month - start.Month) + 1;
-            return Math.Max(1, months);
+            if (end < start)
+            {
+                return 1;
+            }
+
+            for (var months = 1; months <= 24; months++)
+            {
+                var computedEnd = start.AddMonths(months).AddDays(-1);
+                if (computedEnd == end)
+                {
+                    return months;
+                }
+            }
+
+            var inclusiveDays = (end.DayNumber - start.DayNumber) + 1;
+            return Math.Max(1, (int)Math.Round(inclusiveDays / 30.0, MidpointRounding.AwayFromZero));
         }
     }
 }
-
