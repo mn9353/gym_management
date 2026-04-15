@@ -277,6 +277,20 @@ namespace GymManagementBackend.Services
                 throw new InvalidOperationException("Deleting ADMIN users is not allowed via this endpoint.");
             }
 
+            if (string.Equals(user.Role, AppRoles.Trainer, StringComparison.OrdinalIgnoreCase))
+            {
+                await _context.TrainerAssignments
+                    .Where(x => x.TrainerUserId == userId)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(x => x.TrainerUserId, (Guid?)null));
+
+                await _context.SubscriptionMonthServices
+                    .Where(x => x.TrainerUserId == userId)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(x => x.TrainerUserId, (Guid?)null)
+                        .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
+            }
+
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
         }

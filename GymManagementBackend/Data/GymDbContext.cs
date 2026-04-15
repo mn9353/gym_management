@@ -162,7 +162,7 @@ namespace GymManagementBackend.Data
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(x => x.TrainerUserId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<TrainerAssignment>()
                 .HasOne<MemberSubscription>()

@@ -136,9 +136,8 @@ namespace GymManagementBackend.Models
         [Column("member_id")]
         public Guid MemberId { get; set; }
 
-        [Required]
         [Column("trainer_user_id")]
-        public Guid TrainerUserId { get; set; }
+        public Guid? TrainerUserId { get; set; }
 
         [Column("member_subscription_id")]
         public Guid? MemberSubscriptionId { get; set; }

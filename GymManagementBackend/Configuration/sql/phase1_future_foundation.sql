@@ -103,7 +103,7 @@ create table if not exists trainer_assignments (
     id uuid primary key default gen_random_uuid(),
     gym_id uuid not null references gyms(id) on delete cascade,
     member_id uuid not null references members(id) on delete cascade,
-    trainer_user_id uuid not null references users(id) on delete restrict,
+    trainer_user_id uuid null references users(id) on delete set null,
     member_subscription_id uuid null references member_subscriptions(id) on delete set null,
     from_date date not null,
     to_date date null,
@@ -352,4 +352,3 @@ where not exists (
     where st.gym_id = g.id
       and st.code = seed.code
 );
-
