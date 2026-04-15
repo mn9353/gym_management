@@ -61,5 +61,24 @@ namespace GymManagementBackend.Controllers
                 return NotFound(new { message = ex.Message });
             }
         }
+
+        [HttpDelete("{gymId:guid}")]
+        public async Task<IActionResult> DeleteGym(Guid gymId)
+        {
+            try
+            {
+                await _adminService.DeleteGymAsync(gymId);
+                return Ok(new { message = "Gym deleted successfully." });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting gym.");
+                return StatusCode(500, new { message = "Error deleting gym." });
+            }
+        }
     }
 }

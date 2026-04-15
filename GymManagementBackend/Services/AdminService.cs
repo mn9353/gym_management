@@ -13,10 +13,12 @@ namespace GymManagementBackend.Services
         Task<List<GymMonthlyRevenuePointDto>> GetGymMonthlyRevenueAsync(Guid gymId, int months = 12);
         Task<GymDto> CreateGymAsync(CreateGymDto request);
         Task<GymDto> UpdateGymAsync(Guid gymId, UpdateGymDto request);
+        Task DeleteGymAsync(Guid gymId);
         Task<List<AppUserDto>> GetUsersAsync(Guid? gymId = null);
         Task<AppUserDto> CreateUserAsync(CreateUserDto request);
         Task<AppUserDto> CreateUserForGymAsync(Guid gymId, OwnerCreateUserDto request);
         Task<AppUserDto> UpdateUserAsync(Guid userId, UpdateUserDto request);
+        Task DeleteUserAsync(Guid userId);
     }
 
     public class AdminService : IAdminService
@@ -117,6 +119,15 @@ namespace GymManagementBackend.Services
 
             await _context.SaveChangesAsync();
             return (await GetGymsWithCountsAsync(gym.Id)).Single();
+        }
+
+        public async Task DeleteGymAsync(Guid gymId)
+        {
+            var gym = await _context.Gyms.FirstOrDefaultAsync(g => g.Id == gymId)
+                ?? throw new KeyNotFoundException("Gym not found.");
+
+            _context.Gyms.Remove(gym);
+            await _context.SaveChangesAsync();
         }
 
         public async Task<List<AppUserDto>> GetUsersAsync(Guid? gymId = null)
@@ -254,6 +265,20 @@ namespace GymManagementBackend.Services
 
             await _context.SaveChangesAsync();
             return MapUser(user);
+        }
+
+        public async Task DeleteUserAsync(Guid userId)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId)
+                ?? throw new KeyNotFoundException("User not found.");
+
+            if (string.Equals(user.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Deleting ADMIN users is not allowed via this endpoint.");
+            }
+
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
         }
 
         private async Task<List<GymDto>> GetGymsWithCountsAsync(Guid? gymId = null)

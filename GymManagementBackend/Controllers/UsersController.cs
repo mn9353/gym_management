@@ -103,6 +103,31 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpDelete("{userId:guid}")]
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> DeleteUser(Guid userId)
+        {
+            try
+            {
+                var currentUserId = User.GetUserId();
+                if (currentUserId == userId)
+                {
+                    return BadRequest(new { message = "You cannot delete your own admin account." });
+                }
+
+                await _adminService.DeleteUserAsync(userId);
+                return Ok(new { message = "User deleted successfully." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
         private Guid? ResolveGymId(Guid? requestedGymId)
         {
             if (User.IsAdmin())
