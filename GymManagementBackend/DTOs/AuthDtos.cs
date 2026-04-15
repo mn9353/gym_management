@@ -1,11 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using GymManagementBackend.Validation;
 
 namespace GymManagementBackend.DTOs
 {
     public class LoginRequest
     {
         [Required]
-        [EmailAddress]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         [MaxLength(100)]
         public string Email { get; set; } = string.Empty;
 

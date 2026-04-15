@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using GymManagementBackend.Validation;
 
 namespace GymManagementBackend.DTOs
 {
@@ -11,10 +12,11 @@ namespace GymManagementBackend.DTOs
 
         [Required]
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string Phone { get; set; } = string.Empty;
 
         [StringLength(100)]
-        [EmailAddress]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         public string? Email { get; set; }
 
         [StringLength(20)]
@@ -177,10 +179,11 @@ namespace GymManagementBackend.DTOs
         public string? FullName { get; set; }
 
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
         [StringLength(100)]
-        [EmailAddress]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         public string? Email { get; set; }
 
         [StringLength(20)]
@@ -206,6 +209,7 @@ namespace GymManagementBackend.DTOs
         public string? Status { get; set; }
 
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? EmergencyContact { get; set; }
 
         public decimal? Height { get; set; }

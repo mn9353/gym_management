@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GymManagementBackend.Validation;
 
 namespace GymManagementBackend.DTOs
 {
@@ -57,8 +58,10 @@ namespace GymManagementBackend.DTOs
 
         [Required]
         [StringLength(20)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string Phone { get; set; } = string.Empty;
 
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         [StringLength(100)]
         public string? Email { get; set; }
 
@@ -90,4 +93,3 @@ namespace GymManagementBackend.DTOs
         public string? Reason { get; set; }
     }
 }
-
