@@ -9,6 +9,7 @@ using Npgsql;
 
 namespace GymManagementBackend.Controllers
 {
+    
     [ApiController]
     [Route("api/[controller]")]
     [Authorize(Policy = "TrainerOrAbove")]
