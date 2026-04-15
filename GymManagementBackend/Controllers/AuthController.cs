@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using GymManagementBackend.DTOs;
 using GymManagementBackend.Services;
 using GymManagementBackend.Extensions;
+using System.Security.Claims;
 
 namespace GymManagementBackend.Controllers
 {
@@ -74,6 +75,31 @@ namespace GymManagementBackend.Controllers
         public IActionResult VerifyToken()
         {
             return Ok(new { message = "Token is valid" });
+        }
+
+        [HttpGet("debug-auth")]
+        [Authorize]
+        public IActionResult DebugAuthContext()
+        {
+            var claims = User.Claims
+                .Select(c => new { type = c.Type, value = c.Value })
+                .ToList();
+
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var roleClaim = User.FindFirstValue(ClaimTypes.Role) ?? User.FindFirstValue("role");
+            var gymIdClaim = User.FindFirstValue("gym_id");
+
+            return Ok(new
+            {
+                isAuthenticated = User.Identity?.IsAuthenticated ?? false,
+                resolved = new
+                {
+                    userId = userIdClaim,
+                    role = roleClaim,
+                    gymId = gymIdClaim
+                },
+                claims
+            });
         }
 
         private string? GetIpAddress()
