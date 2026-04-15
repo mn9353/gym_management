@@ -10,6 +10,7 @@ namespace GymManagementBackend.Services
     public interface IAdminService
     {
         Task<List<GymDto>> GetGymsAsync();
+        Task<List<GymMonthlyRevenuePointDto>> GetGymMonthlyRevenueAsync(Guid gymId, int months = 12);
         Task<GymDto> CreateGymAsync(CreateGymDto request);
         Task<GymDto> UpdateGymAsync(Guid gymId, UpdateGymDto request);
         Task<List<AppUserDto>> GetUsersAsync(Guid? gymId = null);
@@ -20,6 +21,14 @@ namespace GymManagementBackend.Services
 
     public class AdminService : IAdminService
     {
+        private static readonly HashSet<string> AllowedManagedRoles = new(StringComparer.OrdinalIgnoreCase)
+        {
+            AppRoles.Owner,
+            AppRoles.Staff,
+            AppRoles.Trainer,
+            AppRoles.Member
+        };
+
         private readonly GymDbContext _context;
         private readonly ILogger<AdminService> _logger;
 
@@ -32,6 +41,30 @@ namespace GymManagementBackend.Services
         public async Task<List<GymDto>> GetGymsAsync()
         {
             return await GetGymsWithCountsAsync();
+        }
+
+        public async Task<List<GymMonthlyRevenuePointDto>> GetGymMonthlyRevenueAsync(Guid gymId, int months = 12)
+        {
+            var normalizedMonths = Math.Clamp(months, 1, 36);
+            var today = GetTodayIndia();
+            var from = new DateOnly(today.Year, today.Month, 1).AddMonths(-(normalizedMonths - 1));
+            var to = new DateOnly(today.Year, today.Month, 1).AddMonths(1).AddDays(-1);
+
+            var points = await _context.Payments
+                .AsNoTracking()
+                .Where(p => p.GymId == gymId && p.PaymentDate >= from && p.PaymentDate <= to)
+                .GroupBy(p => new { p.PaymentDate.Year, p.PaymentDate.Month })
+                .Select(g => new GymMonthlyRevenuePointDto
+                {
+                    Year = g.Key.Year,
+                    Month = g.Key.Month,
+                    Amount = g.Sum(p => p.Amount)
+                })
+                .OrderBy(x => x.Year)
+                .ThenBy(x => x.Month)
+                .ToListAsync();
+
+            return points;
         }
 
         public async Task<GymDto> CreateGymAsync(CreateGymDto request)
@@ -119,6 +152,10 @@ namespace GymManagementBackend.Services
             {
                 throw new InvalidOperationException("Use platform provisioning to create ADMIN users.");
             }
+            if (!AllowedManagedRoles.Contains(role))
+            {
+                throw new InvalidOperationException("Invalid role. Allowed roles: OWNER, STAFF, TRAINER, MEMBER.");
+            }
 
             var user = new User
             {
@@ -153,9 +190,9 @@ namespace GymManagementBackend.Services
             }
 
             var role = request.Role.ToUpperInvariant();
-            if (role != AppRoles.Staff)
+            if (role != AppRoles.Staff && role != AppRoles.Trainer)
             {
-                throw new InvalidOperationException("Owners can only create STAFF users.");
+                throw new InvalidOperationException("Owners can only create STAFF or TRAINER users.");
             }
 
             var user = new User
@@ -182,6 +219,22 @@ namespace GymManagementBackend.Services
                 ?? throw new KeyNotFoundException("User not found.");
 
             if (!string.IsNullOrWhiteSpace(request.FullName)) user.FullName = request.FullName.Trim();
+            if (request.Email is not null)
+            {
+                var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+                if (string.IsNullOrWhiteSpace(normalizedEmail))
+                {
+                    throw new InvalidOperationException("Email cannot be empty.");
+                }
+
+                var duplicate = await _context.Users.AnyAsync(u => u.Id != userId && u.Email.ToLower() == normalizedEmail);
+                if (duplicate)
+                {
+                    throw new InvalidOperationException("Email already exists.");
+                }
+
+                user.Email = normalizedEmail;
+            }
             if (request.Phone is not null) user.Phone = request.Phone.Trim();
             if (!string.IsNullOrWhiteSpace(request.Role))
             {
@@ -189,6 +242,10 @@ namespace GymManagementBackend.Services
                 if (newRole == AppRoles.Admin)
                 {
                     throw new InvalidOperationException("Assigning ADMIN role is not allowed via this endpoint.");
+                }
+                if (!AllowedManagedRoles.Contains(newRole))
+                {
+                    throw new InvalidOperationException("Invalid role. Allowed roles: OWNER, STAFF, TRAINER, MEMBER.");
                 }
                 user.Role = newRole;
             }
@@ -240,19 +297,80 @@ namespace GymManagementBackend.Services
                 .Select(g => new { GymId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.GymId, x => x.Count);
 
+            var activeUserCounts = await _context.Users
+                .Where(u => u.GymId.HasValue && gymIds.Contains(u.GymId.Value) && u.IsActive)
+                .GroupBy(u => u.GymId!.Value)
+                .Select(g => new { GymId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.GymId, x => x.Count);
+
+            var inactiveUserCounts = await _context.Users
+                .Where(u => u.GymId.HasValue && gymIds.Contains(u.GymId.Value) && !u.IsActive)
+                .GroupBy(u => u.GymId!.Value)
+                .Select(g => new { GymId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.GymId, x => x.Count);
+
             var memberCounts = await _context.Members
                 .Where(m => gymIds.Contains(m.GymId))
                 .GroupBy(m => m.GymId)
                 .Select(g => new { GymId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.GymId, x => x.Count);
 
+            var today = GetTodayIndia();
+            var currentMonthStart = new DateOnly(today.Year, today.Month, 1);
+            var nextMonthStart = currentMonthStart.AddMonths(1);
+            var lastMonthStart = currentMonthStart.AddMonths(-1);
+
+            var revenueGrouped = await _context.Payments
+                .Where(p => gymIds.Contains(p.GymId))
+                .GroupBy(p => p.GymId)
+                .Select(g => new
+                {
+                    GymId = g.Key,
+                    Total = g.Sum(p => p.Amount),
+                    ThisMonth = g.Where(p => p.PaymentDate >= currentMonthStart && p.PaymentDate < nextMonthStart).Sum(p => (decimal?)p.Amount) ?? 0m,
+                    LastMonth = g.Where(p => p.PaymentDate >= lastMonthStart && p.PaymentDate < currentMonthStart).Sum(p => (decimal?)p.Amount) ?? 0m
+                })
+                .ToListAsync();
+
+            var revenueByGym = revenueGrouped.ToDictionary(x => x.GymId);
+
             foreach (var gym in gyms)
             {
                 gym.UsersCount = userCounts.TryGetValue(gym.Id, out var uc) ? uc : 0;
+                gym.ActiveUsersCount = activeUserCounts.TryGetValue(gym.Id, out var auc) ? auc : 0;
+                gym.InactiveUsersCount = inactiveUserCounts.TryGetValue(gym.Id, out var iuc) ? iuc : 0;
                 gym.MembersCount = memberCounts.TryGetValue(gym.Id, out var mc) ? mc : 0;
+                if (revenueByGym.TryGetValue(gym.Id, out var rev))
+                {
+                    gym.RevenueTotal = rev.Total;
+                    gym.RevenueThisMonth = rev.ThisMonth;
+                    gym.RevenueLastMonth = rev.LastMonth;
+                }
             }
 
             return gyms;
+        }
+
+        private static DateOnly GetTodayIndia()
+        {
+            var utcNow = DateTime.UtcNow;
+            try
+            {
+                var india = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+                return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utcNow, india));
+            }
+            catch
+            {
+                try
+                {
+                    var india = TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata");
+                    return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utcNow, india));
+                }
+                catch
+                {
+                    return DateOnly.FromDateTime(utcNow);
+                }
+            }
         }
 
         private static AppUserDto MapUser(User user)

@@ -36,6 +36,9 @@ namespace GymManagementBackend.DTOs
         [StringLength(50)]
         public string? MembershipType { get; set; }
 
+        [StringLength(20)]
+        public string? TrainingType { get; set; } = "GENERAL";
+
         public decimal? AmountPaid { get; set; }
         public decimal? AmountToPay { get; set; }
 
@@ -190,6 +193,9 @@ namespace GymManagementBackend.DTOs
         [StringLength(50)]
         public string? MembershipType { get; set; }
 
+        [StringLength(20)]
+        public string? TrainingType { get; set; }
+
         public decimal? AmountPaid { get; set; }
         public decimal? AmountToPay { get; set; }
 
@@ -228,6 +234,7 @@ namespace GymManagementBackend.DTOs
         public DateOnly PlanEndDate { get; set; }
         public DateOnly? LastPaymentDate { get; set; }
         public string? MembershipType { get; set; }
+        public string TrainingType { get; set; } = "GENERAL";
         public decimal? AmountPaid { get; set; }
         public decimal? AmountToPay { get; set; }
         public string PaymentStatus { get; set; } = string.Empty;
@@ -269,6 +276,7 @@ namespace GymManagementBackend.DTOs
         public string? Gender { get; set; }
         public string? PaymentStatus { get; set; }
         public string? MembershipType { get; set; }
+        public string? TrainingType { get; set; }
         public string? TrainerAssigned { get; set; }
         public string? LeadSource { get; set; }
 
@@ -300,6 +308,7 @@ namespace GymManagementBackend.DTOs
         public string Status { get; set; } = string.Empty;
         public string PaymentStatus { get; set; } = string.Empty;
         public string? MembershipType { get; set; }
+        public string TrainingType { get; set; } = "GENERAL";
         public string? TrainerAssigned { get; set; }
         public decimal? AmountPaid { get; set; }
         public decimal? AmountToPay { get; set; }
@@ -332,6 +341,7 @@ namespace GymManagementBackend.DTOs
         public DateOnly PlanEndDate { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? MembershipType { get; set; }
+        public string TrainingType { get; set; } = "GENERAL";
     }
 
     public class MemberGridRequestDto

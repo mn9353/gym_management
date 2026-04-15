@@ -53,6 +53,10 @@ namespace GymManagementBackend.Models
         [StringLength(50)]
         public string? MembershipType { get; set; }
 
+        [Column("training_type")]
+        [StringLength(20)]
+        public string TrainingType { get; set; } = "GENERAL"; // GENERAL, PERSONAL, HYBRID
+
         [Column("amount_paid")]
         public decimal? AmountPaid { get; set; }
 

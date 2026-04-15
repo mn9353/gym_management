@@ -15,8 +15,20 @@ namespace GymManagementBackend.DTOs
         public string SubscriptionPlan { get; set; } = "basic";
         public bool IsActive { get; set; }
         public int UsersCount { get; set; }
+        public int ActiveUsersCount { get; set; }
+        public int InactiveUsersCount { get; set; }
         public int MembersCount { get; set; }
+        public decimal RevenueThisMonth { get; set; }
+        public decimal RevenueLastMonth { get; set; }
+        public decimal RevenueTotal { get; set; }
         public DateTime CreatedAt { get; set; }
+    }
+
+    public class GymMonthlyRevenuePointDto
+    {
+        public int Year { get; set; }
+        public int Month { get; set; }
+        public decimal Amount { get; set; }
     }
 
     public class CreateGymDto
@@ -112,7 +124,7 @@ namespace GymManagementBackend.DTOs
         public string Password { get; set; } = string.Empty;
 
         [Required]
-        [RegularExpression("^(ADMIN|OWNER|STAFF)$")]
+        [RegularExpression("^(ADMIN|OWNER|STAFF|TRAINER|MEMBER)$")]
         public string Role { get; set; } = "OWNER";
     }
 
@@ -136,7 +148,7 @@ namespace GymManagementBackend.DTOs
         public string Password { get; set; } = string.Empty;
 
         [Required]
-        [RegularExpression("^(STAFF)$")]
+        [RegularExpression("^(STAFF|TRAINER)$")]
         public string Role { get; set; } = "STAFF";
     }
 
@@ -145,10 +157,14 @@ namespace GymManagementBackend.DTOs
         [StringLength(100)]
         public string? FullName { get; set; }
 
+        [EmailAddress]
+        [StringLength(100)]
+        public string? Email { get; set; }
+
         [StringLength(15)]
         public string? Phone { get; set; }
 
-        [RegularExpression("^(ADMIN|OWNER|STAFF)$")]
+        [RegularExpression("^(ADMIN|OWNER|STAFF|TRAINER|MEMBER)$")]
         public string? Role { get; set; }
 
         public bool? IsActive { get; set; }

@@ -53,6 +53,7 @@ namespace GymManagementBackend.Services
             PlanEndDate = m.PlanEndDate,
             LastPaymentDate = m.LastPaymentDate,
             MembershipType = m.MembershipType,
+            TrainingType = m.TrainingType,
             AmountPaid = m.AmountPaid,
             AmountToPay = m.AmountToPay,
             PaymentStatus = m.PaymentStatus,
@@ -90,6 +91,7 @@ namespace GymManagementBackend.Services
                 var planEndDate = ResolvePlanEndDate(createMemberDto.PlanStartDate, createMemberDto.PlanDurationMonths, createMemberDto.PlanEndDate);
                 ValidateMembershipDates(createMemberDto.PlanStartDate, planEndDate);
                 var membershipType = ResolveMembershipType(createMemberDto.PlanDurationMonths, createMemberDto.MembershipType);
+                var trainingType = NormalizeTrainingTypeValue(createMemberDto.TrainingType) ?? "GENERAL";
                 var initialAmountPaid = decimal.Round(createMemberDto.AmountPaid ?? 0m, 2, MidpointRounding.AwayFromZero);
                 var initialPaymentMode = NormalizePaymentMode(createMemberDto.PaymentMode);
                 if (initialAmountPaid < 0m)
@@ -114,6 +116,7 @@ namespace GymManagementBackend.Services
                     PlanStartDate = createMemberDto.PlanStartDate,
                     PlanEndDate = planEndDate,
                     MembershipType = membershipType,
+                    TrainingType = trainingType,
                     AmountPaid = initialAmountPaid,
                     AmountToPay = createMemberDto.AmountToPay,
                     PaymentStatus = resolvedPaymentStatus,
@@ -554,6 +557,16 @@ namespace GymManagementBackend.Services
                     member.MembershipType = normalizedMembershipType;
                 }
 
+                if (!string.IsNullOrWhiteSpace(updateMemberDto.TrainingType))
+                {
+                    var normalizedTrainingType = NormalizeTrainingTypeValue(updateMemberDto.TrainingType);
+                    if (normalizedTrainingType == null)
+                    {
+                        throw new InvalidOperationException("Training type must be GENERAL, PERSONAL, or HYBRID.");
+                    }
+                    member.TrainingType = normalizedTrainingType;
+                }
+
                 if (updateMemberDto.AmountPaid.HasValue)
                     member.AmountPaid = updateMemberDto.AmountPaid;
 
@@ -725,6 +738,7 @@ namespace GymManagementBackend.Services
                 PlanEndDate = member.PlanEndDate,
                 LastPaymentDate = member.LastPaymentDate,
                 MembershipType = member.MembershipType,
+                TrainingType = member.TrainingType,
                 AmountPaid = member.AmountPaid,
                 AmountToPay = member.AmountToPay,
                 PaymentStatus = member.PaymentStatus,
@@ -774,6 +788,7 @@ namespace GymManagementBackend.Services
                         Status = m.Status,
                         PaymentStatus = m.PaymentStatus,
                         MembershipType = m.MembershipType,
+                        TrainingType = m.TrainingType,
                         TrainerAssigned = m.TrainerAssigned,
                         AmountPaid = normalized.IncludeAmount ? m.AmountPaid : null,
                         AmountToPay = normalized.IncludeAmount ? m.AmountToPay : null
@@ -905,6 +920,7 @@ namespace GymManagementBackend.Services
                         Status = m.Status,
                         PaymentStatus = m.PaymentStatus,
                         MembershipType = m.MembershipType,
+                        TrainingType = m.TrainingType,
                         TrainerAssigned = m.TrainerAssigned,
                         AmountPaid = request.IncludeAmount ? m.AmountPaid : null,
                         AmountToPay = request.IncludeAmount ? m.AmountToPay : null
@@ -1035,6 +1051,16 @@ namespace GymManagementBackend.Services
                     return query.Where(_ => false);
                 }
                 query = query.Where(m => m.MembershipType != null && m.MembershipType == membershipType);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.TrainingType))
+            {
+                var trainingType = NormalizeTrainingTypeValue(filters.TrainingType);
+                if (trainingType == null)
+                {
+                    return query.Where(_ => false);
+                }
+                query = query.Where(m => m.TrainingType == trainingType);
             }
 
             if (!string.IsNullOrWhiteSpace(filters.TrainerAssigned))
@@ -1412,6 +1438,23 @@ namespace GymManagementBackend.Services
             };
         }
 
+        private static string? NormalizeTrainingTypeValue(string? trainingType)
+        {
+            if (string.IsNullOrWhiteSpace(trainingType))
+            {
+                return null;
+            }
+
+            var normalized = trainingType.Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+            return normalized switch
+            {
+                "GENERAL" => "GENERAL",
+                "PERSONAL" => "PERSONAL",
+                "HYBRID" => "HYBRID",
+                _ => null
+            };
+        }
+
         private static string? NormalizePaymentMode(string? paymentMode)
         {
             if (string.IsNullOrWhiteSpace(paymentMode))
@@ -1473,7 +1516,8 @@ namespace GymManagementBackend.Services
                 PlanStartDate = member.PlanStartDate,
                 PlanEndDate = member.PlanEndDate,
                 Status = member.Status,
-                MembershipType = member.MembershipType
+                MembershipType = member.MembershipType,
+                TrainingType = member.TrainingType
             };
         }
 

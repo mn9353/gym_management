@@ -26,6 +26,13 @@ namespace GymManagementBackend.Controllers
             return Ok(gyms);
         }
 
+        [HttpGet("{gymId:guid}/revenue-trend")]
+        public async Task<IActionResult> GetGymRevenueTrend(Guid gymId, [FromQuery] int months = 12)
+        {
+            var trend = await _adminService.GetGymMonthlyRevenueAsync(gymId, months);
+            return Ok(trend);
+        }
+
         [HttpPost]
         public async Task<IActionResult> CreateGym([FromBody] CreateGymDto request)
         {

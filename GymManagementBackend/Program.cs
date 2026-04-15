@@ -84,7 +84,8 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole(AppRoles.Admin));
     options.AddPolicy("OwnerOrAdmin", policy => policy.RequireRole(AppRoles.Owner, AppRoles.Admin));
-    options.AddPolicy("StaffOrAbove", policy => policy.RequireRole(AppRoles.Staff, AppRoles.Owner, AppRoles.Admin));
+    options.AddPolicy("StaffOrAbove", policy => policy.RequireRole(AppRoles.Staff, AppRoles.Trainer, AppRoles.Owner, AppRoles.Admin));
+    options.AddPolicy("TrainerOrAbove", policy => policy.RequireRole(AppRoles.Trainer, AppRoles.Staff, AppRoles.Owner, AppRoles.Admin));
 });
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -139,6 +140,7 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IEnquiryService, EnquiryService>();
 builder.Services.AddHostedService<MembershipStatusSyncBackgroundService>();
 
 builder.Services.AddControllers();
