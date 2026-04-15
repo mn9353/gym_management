@@ -12,6 +12,7 @@ namespace GymManagementBackend.Services
         Task<List<GymDto>> GetGymsAsync();
         Task<List<GymMonthlyRevenuePointDto>> GetGymMonthlyRevenueAsync(Guid gymId, int months = 12);
         Task<GymDto> CreateGymAsync(CreateGymDto request);
+        Task<GymWithOwnersDto> CreateGymWithOwnersAsync(CreateGymWithOwnersDto request);
         Task<GymDto> UpdateGymAsync(Guid gymId, UpdateGymDto request);
         Task DeleteGymAsync(Guid gymId);
         Task<List<AppUserDto>> GetUsersAsync(Guid? gymId = null);
@@ -101,6 +102,89 @@ namespace GymManagementBackend.Services
             return (await GetGymsWithCountsAsync(gym.Id)).Single();
         }
 
+        public async Task<GymWithOwnersDto> CreateGymWithOwnersAsync(CreateGymWithOwnersDto request)
+        {
+            if (request.Gym is null)
+            {
+                throw new InvalidOperationException("Gym details are required.");
+            }
+
+            if (request.Owners is null || request.Owners.Count == 0)
+            {
+                throw new InvalidOperationException("At least one owner is required.");
+            }
+
+            if (request.Owners.Count > 2)
+            {
+                throw new InvalidOperationException("Each gym can have at most 2 owners.");
+            }
+
+            var normalizedOwnerEmails = request.Owners
+                .Select(o => o.Email.Trim().ToLowerInvariant())
+                .ToList();
+
+            if (normalizedOwnerEmails.Distinct().Count() != normalizedOwnerEmails.Count)
+            {
+                throw new InvalidOperationException("Owner emails must be unique.");
+            }
+
+            var existingOwnerEmail = await _context.Users
+                .AnyAsync(u => normalizedOwnerEmails.Contains(u.Email.ToLower()));
+            if (existingOwnerEmail)
+            {
+                throw new InvalidOperationException("One or more owner emails already exist.");
+            }
+
+            var gymEmail = request.Gym.Email?.Trim().ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(gymEmail))
+            {
+                var gymEmailExists = await _context.Gyms.AnyAsync(g => g.Email != null && g.Email.ToLower() == gymEmail);
+                if (gymEmailExists)
+                {
+                    throw new InvalidOperationException("Gym email already exists.");
+                }
+            }
+
+            var gym = new Gym
+            {
+                GymName = request.Gym.GymName.Trim(),
+                OwnerName = request.Gym.OwnerName.Trim(),
+                Phone = request.Gym.Phone?.Trim(),
+                Email = gymEmail,
+                Address = request.Gym.Address?.Trim(),
+                City = request.Gym.City?.Trim(),
+                State = request.Gym.State?.Trim(),
+                SubscriptionPlan = string.IsNullOrWhiteSpace(request.Gym.SubscriptionPlan) ? "basic" : request.Gym.SubscriptionPlan.Trim().ToLowerInvariant(),
+                IsActive = true
+            };
+
+            var ownerUsers = request.Owners.Select(o => new User
+            {
+                GymId = gym.Id,
+                FullName = o.FullName.Trim(),
+                Email = o.Email.Trim().ToLowerInvariant(),
+                Phone = o.Phone?.Trim(),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(o.Password),
+                Role = AppRoles.Owner,
+                IsActive = true
+            }).ToList();
+
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            _context.Gyms.Add(gym);
+            _context.Users.AddRange(ownerUsers);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("Gym with owners created: {GymId} (Owners: {OwnerCount})", gym.Id, ownerUsers.Count);
+
+            return new GymWithOwnersDto
+            {
+                Gym = (await GetGymsWithCountsAsync(gym.Id)).Single(),
+                Owners = ownerUsers.Select(MapUser).ToList()
+            };
+        }
+
         public async Task<GymDto> UpdateGymAsync(Guid gymId, UpdateGymDto request)
         {
             var gym = await _context.Gyms.FirstOrDefaultAsync(g => g.Id == gymId)
@@ -166,6 +250,10 @@ namespace GymManagementBackend.Services
             if (!AllowedManagedRoles.Contains(role))
             {
                 throw new InvalidOperationException("Invalid role. Allowed roles: OWNER, STAFF, TRAINER, MEMBER.");
+            }
+            if (role == AppRoles.Owner)
+            {
+                await EnsureOwnerCapacityAsync(request.GymId, 1);
             }
 
             var user = new User
@@ -257,6 +345,14 @@ namespace GymManagementBackend.Services
                 if (!AllowedManagedRoles.Contains(newRole))
                 {
                     throw new InvalidOperationException("Invalid role. Allowed roles: OWNER, STAFF, TRAINER, MEMBER.");
+                }
+                if (newRole == AppRoles.Owner && !string.Equals(user.Role, AppRoles.Owner, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!user.GymId.HasValue)
+                    {
+                        throw new InvalidOperationException("Cannot assign OWNER role to a user without a gym.");
+                    }
+                    await EnsureOwnerCapacityAsync(user.GymId.Value, 1);
                 }
                 user.Role = newRole;
             }
@@ -440,6 +536,17 @@ namespace GymManagementBackend.Services
                 IsActive = user.IsActive,
                 CreatedAt = user.CreatedAt
             };
+        }
+
+        private async Task EnsureOwnerCapacityAsync(Guid gymId, int newOwnersCount)
+        {
+            var existingOwnerCount = await _context.Users
+                .CountAsync(u => u.GymId == gymId && u.Role == AppRoles.Owner);
+
+            if (existingOwnerCount + newOwnersCount > 2)
+            {
+                throw new InvalidOperationException("Each gym can have at most 2 owners.");
+            }
         }
     }
 }

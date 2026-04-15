@@ -48,6 +48,21 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpPost("with-owners")]
+        public async Task<IActionResult> CreateGymWithOwners([FromBody] CreateGymWithOwnersDto request)
+        {
+            try
+            {
+                var response = await _adminService.CreateGymWithOwnersAsync(request);
+                return Created($"/api/gyms/{response.Gym.Id}", response);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Create gym with owners validation failed.");
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPut("{gymId:guid}")]
         public async Task<IActionResult> UpdateGym(Guid gymId, [FromBody] UpdateGymDto request)
         {
