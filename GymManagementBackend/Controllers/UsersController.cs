@@ -3,6 +3,8 @@ using GymManagementBackend.Extensions;
 using GymManagementBackend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GymManagementBackend.Controllers
 {
@@ -53,6 +55,16 @@ namespace GymManagementBackend.Controllers
             {
                 return NotFound(new { message = ex.Message });
             }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg)
+            {
+                _logger.LogError(ex, "Create user database error. SqlState={SqlState}, Constraint={Constraint}", pg.SqlState, pg.ConstraintName);
+                return MapPostgresError(pg, "Unable to create user due to a database rule.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Create user failed unexpectedly.");
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Unable to create user right now." });
+            }
         }
 
         [HttpPost("owner")]
@@ -81,6 +93,16 @@ namespace GymManagementBackend.Controllers
             catch (KeyNotFoundException ex)
             {
                 return NotFound(new { message = ex.Message });
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg)
+            {
+                _logger.LogError(ex, "Owner create user database error. SqlState={SqlState}, Constraint={Constraint}", pg.SqlState, pg.ConstraintName);
+                return MapPostgresError(pg, "Unable to add team user due to a database rule.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Owner create user failed unexpectedly.");
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Unable to add team user right now." });
             }
         }
 
@@ -142,6 +164,27 @@ namespace GymManagementBackend.Controllers
             }
 
             return gymId.Value;
+        }
+
+        private IActionResult MapPostgresError(PostgresException pg, string fallbackMessage)
+        {
+            return pg.SqlState switch
+            {
+                PostgresErrorCodes.UniqueViolation => Conflict(new { message = "Email already exists." }),
+                PostgresErrorCodes.ForeignKeyViolation => BadRequest(new { message = "Invalid gym or related reference." }),
+                PostgresErrorCodes.CheckViolation => BadRequest(new
+                {
+                    message = "Input failed database validation. Please verify role/phone/email format.",
+                    constraint = pg.ConstraintName
+                }),
+                PostgresErrorCodes.StringDataRightTruncation => BadRequest(new { message = "One or more values are too long." }),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    message = fallbackMessage,
+                    sqlState = pg.SqlState,
+                    constraint = pg.ConstraintName
+                })
+            };
         }
     }
 }
