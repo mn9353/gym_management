@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Npgsql;
+using Resend;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,8 +21,20 @@ if (builder.Environment.IsDevelopment())
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<MembershipStatusJobSettings>(builder.Configuration.GetSection("MembershipStatusJob"));
+builder.Services.Configure<EmailNotificationSettings>(builder.Configuration.GetSection("EmailNotifications"));
 var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 builder.Services.AddSingleton(jwtSettings);
+
+builder.Services.AddOptions();
+builder.Services.AddHttpClient<ResendClient>();
+builder.Services.Configure<ResendClientOptions>(options =>
+{
+    options.ApiToken =
+        builder.Configuration["Resend:ApiToken"]
+        ?? Environment.GetEnvironmentVariable("RESEND_APITOKEN")
+        ?? string.Empty;
+});
+builder.Services.AddTransient<IResend, ResendClient>();
 
 if (string.IsNullOrWhiteSpace(jwtSettings.Secret) || jwtSettings.Secret.Length < 32)
 {
@@ -141,6 +154,7 @@ builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IEnquiryService, EnquiryService>();
+builder.Services.AddScoped<IEmailNotificationService, EmailNotificationService>();
 builder.Services.AddHostedService<MembershipStatusSyncBackgroundService>();
 
 builder.Services.AddControllers();

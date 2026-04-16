@@ -4,6 +4,7 @@ using GymManagementBackend.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
 
 namespace GymManagementBackend.Services
 {
@@ -39,6 +40,7 @@ namespace GymManagementBackend.Services
     {
         private readonly GymDbContext _context;
         private readonly ILogger<MemberService> _logger;
+        private readonly IEmailNotificationService _emailNotificationService;
         private static readonly Expression<Func<Member, MemberDto>> MemberToDtoProjection = m => new MemberDto
         {
             Id = m.Id,
@@ -70,10 +72,14 @@ namespace GymManagementBackend.Services
             UpdatedAt = m.UpdatedAt
         };
 
-        public MemberService(GymDbContext context, ILogger<MemberService> logger)
+        public MemberService(
+            GymDbContext context,
+            ILogger<MemberService> logger,
+            IEmailNotificationService emailNotificationService)
         {
             _context = context;
             _logger = logger;
+            _emailNotificationService = emailNotificationService;
         }
 
         public async Task<MemberDto> CreateMemberAsync(Guid gymId, CreateMemberDto createMemberDto)
@@ -104,12 +110,18 @@ namespace GymManagementBackend.Services
                 }
                 var resolvedPaymentStatus = ResolvePaymentStatus(initialAmountPaid, createMemberDto.AmountToPay);
 
+                var normalizedEmail = createMemberDto.Email?.Trim().ToLowerInvariant();
+                var temporaryPassword = !string.IsNullOrWhiteSpace(normalizedEmail)
+                    ? GenerateTemporaryPassword()
+                    : null;
+
                 var member = new Member
                 {
                     GymId = gymId,
                     FullName = createMemberDto.FullName.Trim(),
                     Phone = createMemberDto.Phone?.Trim(),
-                    Email = createMemberDto.Email?.Trim().ToLowerInvariant(),
+                    Email = normalizedEmail,
+                    PasswordHash = temporaryPassword is null ? null : BCrypt.Net.BCrypt.HashPassword(temporaryPassword),
                     Gender = createMemberDto.Gender?.Trim(),
                     DateOfBirth = createMemberDto.DateOfBirth,
                     JoinDate = createMemberDto.JoinDate,
@@ -155,6 +167,22 @@ namespace GymManagementBackend.Services
                 await transaction.CommitAsync();
 
                 _logger.LogInformation($"Member created: {member.Id}");
+
+                if (!string.IsNullOrWhiteSpace(normalizedEmail) && !string.IsNullOrWhiteSpace(temporaryPassword))
+                {
+                    var gymName = await _context.Gyms
+                        .Where(g => g.Id == gymId)
+                        .Select(g => g.GymName)
+                        .FirstOrDefaultAsync() ?? "Gym";
+
+                    await _emailNotificationService.SendMemberWelcomeEmailAsync(
+                        normalizedEmail,
+                        member.FullName,
+                        normalizedEmail,
+                        temporaryPassword,
+                        gymName);
+                }
+
                 return MapMemberToDto(member);
             }
             catch (Exception ex)
@@ -1535,6 +1563,34 @@ namespace GymManagementBackend.Services
         private static string NormalizeEmail(string? email)
         {
             return string.IsNullOrWhiteSpace(email) ? string.Empty : email.Trim().ToLowerInvariant();
+        }
+
+        private static string GenerateTemporaryPassword()
+        {
+            const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+            const string lower = "abcdefghijkmnpqrstuvwxyz";
+            const string digits = "23456789";
+            const string special = "@#$%&*!";
+            var all = upper + lower + digits + special;
+
+            Span<char> password = stackalloc char[10];
+            password[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+            password[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+            password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+            password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+
+            for (var i = 4; i < password.Length; i++)
+            {
+                password[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
+            }
+
+            for (var i = password.Length - 1; i > 0; i--)
+            {
+                var j = RandomNumberGenerator.GetInt32(i + 1);
+                (password[i], password[j]) = (password[j], password[i]);
+            }
+
+            return new string(password);
         }
 
         private static DateTime GetDbTimestampNow()

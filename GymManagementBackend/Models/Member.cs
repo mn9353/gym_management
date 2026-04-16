@@ -27,6 +27,9 @@ namespace GymManagementBackend.Models
         [StringLength(100)]
         public string? Email { get; set; }
 
+        [Column("password_hash")]
+        public string? PasswordHash { get; set; }
+
         [Column("gender")]
         [StringLength(20)]
         public string? Gender { get; set; }
