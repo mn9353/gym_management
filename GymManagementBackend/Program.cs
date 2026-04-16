@@ -9,7 +9,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Npgsql;
-using Resend;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,16 +24,10 @@ builder.Services.Configure<EmailNotificationSettings>(builder.Configuration.GetS
 var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 builder.Services.AddSingleton(jwtSettings);
 
-builder.Services.AddOptions();
-builder.Services.AddHttpClient<ResendClient>();
-builder.Services.Configure<ResendClientOptions>(options =>
+builder.Services.AddHttpClient("ResendApi", client =>
 {
-    options.ApiToken =
-        builder.Configuration["Resend:ApiToken"]
-        ?? Environment.GetEnvironmentVariable("RESEND_APITOKEN")
-        ?? string.Empty;
+    client.BaseAddress = new Uri("https://api.resend.com");
 });
-builder.Services.AddTransient<IResend, ResendClient>();
 
 if (string.IsNullOrWhiteSpace(jwtSettings.Secret) || jwtSettings.Secret.Length < 32)
 {

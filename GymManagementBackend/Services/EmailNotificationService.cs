@@ -1,7 +1,10 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
 using GymManagementBackend.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
-using Resend;
 
 namespace GymManagementBackend.Services
 {
@@ -20,16 +23,19 @@ namespace GymManagementBackend.Services
 
     public class EmailNotificationService : IEmailNotificationService
     {
-        private readonly IResend _resend;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _configuration;
         private readonly EmailNotificationSettings _settings;
         private readonly ILogger<EmailNotificationService> _logger;
 
         public EmailNotificationService(
-            IResend resend,
+            IHttpClientFactory httpClientFactory,
+            IConfiguration configuration,
             IOptions<EmailNotificationSettings> settings,
             ILogger<EmailNotificationService> logger)
         {
-            _resend = resend;
+            _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
             _settings = settings.Value;
             _logger = logger;
         }
@@ -141,15 +147,44 @@ namespace GymManagementBackend.Services
         {
             try
             {
-                var message = new EmailMessage
-                {
-                    From = $"{_settings.FromName} <{_settings.FromEmail}>",
-                    Subject = subject,
-                    HtmlBody = htmlBody
-                };
-                message.To.Add(toEmail);
+                var apiToken =
+                    _configuration["Resend:ApiToken"]
+                    ?? Environment.GetEnvironmentVariable("RESEND_APITOKEN")
+                    ?? string.Empty;
 
-                await _resend.EmailSendAsync(message);
+                if (string.IsNullOrWhiteSpace(apiToken))
+                {
+                    return new EmailDeliveryResult
+                    {
+                        Success = false,
+                        Message = "Resend API token is missing."
+                    };
+                }
+
+                var client = _httpClientFactory.CreateClient("ResendApi");
+                using var request = new HttpRequestMessage(HttpMethod.Post, "/emails");
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+                request.Content = JsonContent.Create(new
+                {
+                    from = $"{_settings.FromName} <{_settings.FromEmail}>",
+                    to = new[] { toEmail },
+                    subject,
+                    html = htmlBody
+                });
+
+                using var response = await client.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync();
+                    var message = TryExtractResendErrorMessage(errorBody)
+                        ?? $"Resend API failed with status {(int)response.StatusCode}";
+                    return new EmailDeliveryResult
+                    {
+                        Success = false,
+                        Message = message
+                    };
+                }
+
                 return new EmailDeliveryResult
                 {
                     Success = true,
@@ -170,6 +205,29 @@ namespace GymManagementBackend.Services
         private static string Html(string? value)
         {
             return WebUtility.HtmlEncode(value ?? string.Empty);
+        }
+
+        private static string? TryExtractResendErrorMessage(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return null;
+            }
+
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("message", out var msg))
+                {
+                    return msg.GetString();
+                }
+            }
+            catch
+            {
+                // ignore parse failure
+            }
+
+            return body;
         }
     }
 }
