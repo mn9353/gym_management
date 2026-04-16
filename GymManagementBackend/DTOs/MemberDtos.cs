@@ -251,6 +251,8 @@ namespace GymManagementBackend.DTOs
         public string? TrainerAssigned { get; set; }
         public string? LeadSource { get; set; }
         public string? ProfileImageUrl { get; set; }
+        public bool? WelcomeEmailSent { get; set; }
+        public string? WelcomeEmailMessage { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

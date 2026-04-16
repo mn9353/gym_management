@@ -168,6 +168,8 @@ namespace GymManagementBackend.Services
 
                 _logger.LogInformation($"Member created: {member.Id}");
 
+                EmailDeliveryResult? emailResult = null;
+
                 if (!string.IsNullOrWhiteSpace(normalizedEmail) && !string.IsNullOrWhiteSpace(temporaryPassword))
                 {
                     var gymName = await _context.Gyms
@@ -175,7 +177,7 @@ namespace GymManagementBackend.Services
                         .Select(g => g.GymName)
                         .FirstOrDefaultAsync() ?? "Gym";
 
-                    await _emailNotificationService.SendMemberWelcomeEmailAsync(
+                    emailResult = await _emailNotificationService.SendMemberWelcomeEmailAsync(
                         normalizedEmail,
                         member.FullName,
                         normalizedEmail,
@@ -183,7 +185,13 @@ namespace GymManagementBackend.Services
                         gymName);
                 }
 
-                return MapMemberToDto(member);
+                var dto = MapMemberToDto(member);
+                if (emailResult is not null)
+                {
+                    dto.WelcomeEmailSent = emailResult.Success;
+                    dto.WelcomeEmailMessage = emailResult.Message;
+                }
+                return dto;
             }
             catch (Exception ex)
             {

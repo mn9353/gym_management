@@ -22,6 +22,8 @@ namespace GymManagementBackend.DTOs
         public decimal RevenueThisMonth { get; set; }
         public decimal RevenueLastMonth { get; set; }
         public decimal RevenueTotal { get; set; }
+        public bool? NotificationEmailSent { get; set; }
+        public string? NotificationEmailMessage { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 
@@ -140,6 +142,8 @@ namespace GymManagementBackend.DTOs
         public string? Phone { get; set; }
         public string Role { get; set; } = string.Empty;
         public bool IsActive { get; set; }
+        public bool? WelcomeEmailSent { get; set; }
+        public string? WelcomeEmailMessage { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 

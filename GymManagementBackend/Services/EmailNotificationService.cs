@@ -5,11 +5,17 @@ using Resend;
 
 namespace GymManagementBackend.Services
 {
+    public sealed class EmailDeliveryResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+
     public interface IEmailNotificationService
     {
-        Task SendGymCreatedEmailAsync(string toEmail, string gymName, string ownerName);
-        Task SendUserWelcomeEmailAsync(string toEmail, string fullName, string role, string loginId, string temporaryPassword, string gymName);
-        Task SendMemberWelcomeEmailAsync(string toEmail, string memberName, string loginId, string temporaryPassword, string gymName);
+        Task<EmailDeliveryResult> SendGymCreatedEmailAsync(string toEmail, string gymName, string ownerName);
+        Task<EmailDeliveryResult> SendUserWelcomeEmailAsync(string toEmail, string fullName, string role, string loginId, string temporaryPassword, string gymName);
+        Task<EmailDeliveryResult> SendMemberWelcomeEmailAsync(string toEmail, string memberName, string loginId, string temporaryPassword, string gymName);
     }
 
     public class EmailNotificationService : IEmailNotificationService
@@ -28,11 +34,11 @@ namespace GymManagementBackend.Services
             _logger = logger;
         }
 
-        public async Task SendGymCreatedEmailAsync(string toEmail, string gymName, string ownerName)
+        public async Task<EmailDeliveryResult> SendGymCreatedEmailAsync(string toEmail, string gymName, string ownerName)
         {
-            if (!CanSend(toEmail))
+            if (!CanSend(toEmail, out var reason))
             {
-                return;
+                return new EmailDeliveryResult { Success = false, Message = reason };
             }
 
             var safeGym = Html(gymName);
@@ -46,10 +52,10 @@ namespace GymManagementBackend.Services
                   <p>You can now add owners/staff/trainers and start onboarding members.</p>
                 </div>";
 
-            await SendAsync(toEmail, subject, html);
+            return await SendAsync(toEmail, subject, html);
         }
 
-        public async Task SendUserWelcomeEmailAsync(
+        public async Task<EmailDeliveryResult> SendUserWelcomeEmailAsync(
             string toEmail,
             string fullName,
             string role,
@@ -57,9 +63,9 @@ namespace GymManagementBackend.Services
             string temporaryPassword,
             string gymName)
         {
-            if (!CanSend(toEmail))
+            if (!CanSend(toEmail, out var reason))
             {
-                return;
+                return new EmailDeliveryResult { Success = false, Message = reason };
             }
 
             var safeName = Html(fullName);
@@ -79,19 +85,19 @@ namespace GymManagementBackend.Services
                   <p>Please change your password after first login.</p>
                 </div>";
 
-            await SendAsync(toEmail, subject, html);
+            return await SendAsync(toEmail, subject, html);
         }
 
-        public async Task SendMemberWelcomeEmailAsync(
+        public async Task<EmailDeliveryResult> SendMemberWelcomeEmailAsync(
             string toEmail,
             string memberName,
             string loginId,
             string temporaryPassword,
             string gymName)
         {
-            if (!CanSend(toEmail))
+            if (!CanSend(toEmail, out var reason))
             {
-                return;
+                return new EmailDeliveryResult { Success = false, Message = reason };
             }
 
             var safeName = Html(memberName);
@@ -110,20 +116,28 @@ namespace GymManagementBackend.Services
                   <p>Please keep these credentials safe. Password reset email flow can be enabled next.</p>
                 </div>";
 
-            await SendAsync(toEmail, subject, html);
+            return await SendAsync(toEmail, subject, html);
         }
 
-        private bool CanSend(string? toEmail)
+        private bool CanSend(string? toEmail, out string reason)
         {
             if (!_settings.Enabled)
             {
+                reason = "Email notifications are disabled.";
                 return false;
             }
 
-            return !string.IsNullOrWhiteSpace(toEmail);
+            if (string.IsNullOrWhiteSpace(toEmail))
+            {
+                reason = "Recipient email is missing.";
+                return false;
+            }
+
+            reason = string.Empty;
+            return true;
         }
 
-        private async Task SendAsync(string toEmail, string subject, string htmlBody)
+        private async Task<EmailDeliveryResult> SendAsync(string toEmail, string subject, string htmlBody)
         {
             try
             {
@@ -136,10 +150,20 @@ namespace GymManagementBackend.Services
                 message.To.Add(toEmail);
 
                 await _resend.EmailSendAsync(message);
+                return new EmailDeliveryResult
+                {
+                    Success = true,
+                    Message = "Email sent."
+                };
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send email to {Email} with subject {Subject}", toEmail, subject);
+                return new EmailDeliveryResult
+                {
+                    Success = false,
+                    Message = ex.Message
+                };
             }
         }
 

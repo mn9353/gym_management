@@ -104,14 +104,21 @@ namespace GymManagementBackend.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Gym created: {GymId}", gym.Id);
+            EmailDeliveryResult? gymEmailResult = null;
             if (!string.IsNullOrWhiteSpace(gym.Email))
             {
-                await _emailNotificationService.SendGymCreatedEmailAsync(
+                gymEmailResult = await _emailNotificationService.SendGymCreatedEmailAsync(
                     gym.Email,
                     gym.GymName,
                     gym.OwnerName);
             }
-            return (await GetGymsWithCountsAsync(gym.Id)).Single();
+            var createdGym = (await GetGymsWithCountsAsync(gym.Id)).Single();
+            if (gymEmailResult is not null)
+            {
+                createdGym.NotificationEmailSent = gymEmailResult.Success;
+                createdGym.NotificationEmailMessage = gymEmailResult.Message;
+            }
+            return createdGym;
         }
 
         public async Task<GymWithOwnersDto> CreateGymWithOwnersAsync(CreateGymWithOwnersDto request)
@@ -190,31 +197,48 @@ namespace GymManagementBackend.Services
 
             _logger.LogInformation("Gym with owners created: {GymId} (Owners: {OwnerCount})", gym.Id, ownerUsers.Count);
 
+            var ownerMailStatuses = new List<EmailDeliveryResult>();
             for (var i = 0; i < ownerUsers.Count; i++)
             {
                 var ownerUser = ownerUsers[i];
                 var ownerRequest = request.Owners[i];
-                await _emailNotificationService.SendUserWelcomeEmailAsync(
+                var result = await _emailNotificationService.SendUserWelcomeEmailAsync(
                     ownerUser.Email,
                     ownerUser.FullName,
                     ownerUser.Role,
                     ownerUser.Email,
                     ownerRequest.Password,
                     gym.GymName);
+                ownerMailStatuses.Add(result);
             }
 
+            EmailDeliveryResult? gymEmailResult = null;
             if (!string.IsNullOrWhiteSpace(gym.Email))
             {
-                await _emailNotificationService.SendGymCreatedEmailAsync(
+                gymEmailResult = await _emailNotificationService.SendGymCreatedEmailAsync(
                     gym.Email,
                     gym.GymName,
                     gym.OwnerName);
             }
 
+            var createdGym = (await GetGymsWithCountsAsync(gym.Id)).Single();
+            if (gymEmailResult is not null)
+            {
+                createdGym.NotificationEmailSent = gymEmailResult.Success;
+                createdGym.NotificationEmailMessage = gymEmailResult.Message;
+            }
+
+            var ownerDtos = ownerUsers.Select(MapUser).ToList();
+            for (var i = 0; i < ownerDtos.Count && i < ownerMailStatuses.Count; i++)
+            {
+                ownerDtos[i].WelcomeEmailSent = ownerMailStatuses[i].Success;
+                ownerDtos[i].WelcomeEmailMessage = ownerMailStatuses[i].Message;
+            }
+
             return new GymWithOwnersDto
             {
-                Gym = (await GetGymsWithCountsAsync(gym.Id)).Single(),
-                Owners = ownerUsers.Select(MapUser).ToList()
+                Gym = createdGym,
+                Owners = ownerDtos
             };
         }
 
@@ -308,14 +332,17 @@ namespace GymManagementBackend.Services
                 .Where(g => g.Id == request.GymId)
                 .Select(g => g.GymName)
                 .FirstOrDefaultAsync() ?? "Gym";
-            await _emailNotificationService.SendUserWelcomeEmailAsync(
+            var emailResult = await _emailNotificationService.SendUserWelcomeEmailAsync(
                 user.Email,
                 user.FullName,
                 user.Role,
                 user.Email,
                 request.Password,
                 gymName);
-            return MapUser(user);
+            var dto = MapUser(user);
+            dto.WelcomeEmailSent = emailResult.Success;
+            dto.WelcomeEmailMessage = emailResult.Message;
+            return dto;
         }
 
         public async Task<AppUserDto> CreateUserForGymAsync(Guid gymId, OwnerCreateUserDto request)
@@ -357,14 +384,17 @@ namespace GymManagementBackend.Services
                 .Where(g => g.Id == gymId)
                 .Select(g => g.GymName)
                 .FirstOrDefaultAsync() ?? "Gym";
-            await _emailNotificationService.SendUserWelcomeEmailAsync(
+            var emailResult = await _emailNotificationService.SendUserWelcomeEmailAsync(
                 user.Email,
                 user.FullName,
                 user.Role,
                 user.Email,
                 request.Password,
                 gymName);
-            return MapUser(user);
+            var dto = MapUser(user);
+            dto.WelcomeEmailSent = emailResult.Success;
+            dto.WelcomeEmailMessage = emailResult.Message;
+            return dto;
         }
 
         public async Task<AppUserDto> UpdateUserAsync(Guid userId, UpdateUserDto request)
