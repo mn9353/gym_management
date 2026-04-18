@@ -87,6 +87,9 @@ namespace GymManagementBackend.Models
         [Column("weight")]
         public decimal? Weight { get; set; }
 
+        [Column("target_weight")]
+        public decimal? TargetWeight { get; set; }
+
         [Column("fitness_goal")]
         [StringLength(255)]
         public string? FitnessGoal { get; set; }

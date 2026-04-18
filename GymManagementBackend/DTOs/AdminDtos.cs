@@ -90,11 +90,6 @@ namespace GymManagementBackend.DTOs
         [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
-        [Required]
-        [MinLength(8)]
-        [MaxLength(100)]
-        [StrongPassword(ErrorMessage = "Password must include uppercase, lowercase, number, and special character.")]
-        public string Password { get; set; } = string.Empty;
     }
 
     public class GymWithOwnersDto
@@ -166,12 +161,6 @@ namespace GymManagementBackend.DTOs
         public string? Phone { get; set; }
 
         [Required]
-        [MinLength(8)]
-        [MaxLength(100)]
-        [StrongPassword(ErrorMessage = "Password must include uppercase, lowercase, number, and special character.")]
-        public string Password { get; set; } = string.Empty;
-
-        [Required]
         [RegularExpression("^(ADMIN|OWNER|STAFF|TRAINER|MEMBER)$")]
         public string Role { get; set; } = "OWNER";
     }
@@ -190,12 +179,6 @@ namespace GymManagementBackend.DTOs
         [StringLength(15)]
         [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
-
-        [Required]
-        [MinLength(8)]
-        [MaxLength(100)]
-        [StrongPassword(ErrorMessage = "Password must include uppercase, lowercase, number, and special character.")]
-        public string Password { get; set; } = string.Empty;
 
         [Required]
         [RegularExpression("^(STAFF|TRAINER)$")]

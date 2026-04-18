@@ -64,6 +64,7 @@ namespace GymManagementBackend.Services
             EmergencyContact = m.EmergencyContact,
             Height = m.Height,
             Weight = m.Weight,
+            TargetWeight = m.TargetWeight,
             FitnessGoal = m.FitnessGoal,
             TrainerAssigned = m.TrainerAssigned,
             LeadSource = m.LeadSource,
@@ -98,6 +99,17 @@ namespace GymManagementBackend.Services
                 ValidateMembershipDates(createMemberDto.PlanStartDate, planEndDate);
                 var membershipType = ResolveMembershipType(createMemberDto.PlanDurationMonths, createMemberDto.MembershipType);
                 var trainingType = NormalizeTrainingTypeValue(createMemberDto.TrainingType) ?? "GENERAL";
+                var trainerAssigned = string.IsNullOrWhiteSpace(createMemberDto.TrainerAssigned)
+                    ? null
+                    : createMemberDto.TrainerAssigned.Trim();
+                if (trainingType == "PERSONAL" && string.IsNullOrWhiteSpace(trainerAssigned))
+                {
+                    throw new InvalidOperationException("Trainer selection is required for PERSONAL training.");
+                }
+                if (trainingType != "PERSONAL")
+                {
+                    trainerAssigned = null;
+                }
                 var initialAmountPaid = decimal.Round(createMemberDto.AmountPaid ?? 0m, 2, MidpointRounding.AwayFromZero);
                 var initialPaymentMode = NormalizePaymentMode(createMemberDto.PaymentMode);
                 if (initialAmountPaid < 0m)
@@ -136,8 +148,9 @@ namespace GymManagementBackend.Services
                     EmergencyContact = createMemberDto.EmergencyContact?.Trim(),
                     Height = createMemberDto.Height,
                     Weight = createMemberDto.Weight,
+                    TargetWeight = createMemberDto.TargetWeight,
                     FitnessGoal = createMemberDto.FitnessGoal?.Trim(),
-                    TrainerAssigned = createMemberDto.TrainerAssigned?.Trim(),
+                    TrainerAssigned = trainerAssigned,
                     LeadSource = createMemberDto.LeadSource?.Trim(),
                     Notes = createMemberDto.Notes?.Trim(),
                     Status = ResolveStatusFromPlanEndDate(planEndDate)
@@ -601,6 +614,10 @@ namespace GymManagementBackend.Services
                         throw new InvalidOperationException("Training type must be GENERAL, PERSONAL, or HYBRID.");
                     }
                     member.TrainingType = normalizedTrainingType;
+                    if (normalizedTrainingType != "PERSONAL")
+                    {
+                        member.TrainerAssigned = null;
+                    }
                 }
 
                 if (updateMemberDto.AmountPaid.HasValue)
@@ -626,11 +643,20 @@ namespace GymManagementBackend.Services
                 if (updateMemberDto.Weight.HasValue)
                     member.Weight = updateMemberDto.Weight;
 
+                if (updateMemberDto.TargetWeight.HasValue)
+                    member.TargetWeight = updateMemberDto.TargetWeight;
+
                 if (!string.IsNullOrEmpty(updateMemberDto.FitnessGoal))
                     member.FitnessGoal = updateMemberDto.FitnessGoal;
 
                 if (!string.IsNullOrEmpty(updateMemberDto.TrainerAssigned))
-                    member.TrainerAssigned = updateMemberDto.TrainerAssigned;
+                {
+                    var nextTrainer = updateMemberDto.TrainerAssigned.Trim();
+                    if (string.Equals(member.TrainingType, "PERSONAL", StringComparison.OrdinalIgnoreCase))
+                    {
+                        member.TrainerAssigned = nextTrainer;
+                    }
+                }
 
                 if (!string.IsNullOrEmpty(updateMemberDto.Notes))
                     member.Notes = updateMemberDto.Notes;
@@ -783,6 +809,7 @@ namespace GymManagementBackend.Services
                 EmergencyContact = member.EmergencyContact,
                 Height = member.Height,
                 Weight = member.Weight,
+                TargetWeight = member.TargetWeight,
                 FitnessGoal = member.FitnessGoal,
                 TrainerAssigned = member.TrainerAssigned,
                 LeadSource = member.LeadSource,

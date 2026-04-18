@@ -3,6 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using GymManagementBackend.Configuration;
+using GymManagementBackend.Data;
+using GymManagementBackend.Models;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
@@ -24,17 +27,20 @@ namespace GymManagementBackend.Services
     public class EmailNotificationService : IEmailNotificationService
     {
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly GymDbContext _context;
         private readonly IConfiguration _configuration;
         private readonly EmailNotificationSettings _settings;
         private readonly ILogger<EmailNotificationService> _logger;
 
         public EmailNotificationService(
             IHttpClientFactory httpClientFactory,
+            GymDbContext context,
             IConfiguration configuration,
             IOptions<EmailNotificationSettings> settings,
             ILogger<EmailNotificationService> logger)
         {
             _httpClientFactory = httpClientFactory;
+            _context = context;
             _configuration = configuration;
             _settings = settings.Value;
             _logger = logger;
@@ -49,16 +55,29 @@ namespace GymManagementBackend.Services
 
             var safeGym = Html(gymName);
             var safeOwner = Html(ownerName);
-            var subject = $"Gym Created: {gymName}";
-            var html = $@"
+            var fallbackSubject = $"Gym Created: {gymName}";
+            var fallbackHtml = $@"
                 <div style='font-family:Segoe UI,Arial,sans-serif;line-height:1.5'>
                   <h2>Welcome to Gym Manager</h2>
                   <p>Hi {safeOwner},</p>
                   <p>Your gym <strong>{safeGym}</strong> was created successfully by the admin.</p>
                   <p>You can now add owners/staff/trainers and start onboarding members.</p>
+                  <p><a href='{Html(_settings.LoginUrl)}' style='color:#0b7a75;font-weight:700'>Sign in to Gym Manager</a></p>
                 </div>";
 
-            return await SendAsync(toEmail, subject, html);
+            var resolved = await ResolveEmailContentAsync(
+                "gym_created",
+                fallbackSubject,
+                fallbackHtml,
+                new Dictionary<string, string>
+                {
+                    ["GymName"] = safeGym,
+                    ["OwnerName"] = safeOwner,
+                    ["LoginUrl"] = Html(_settings.LoginUrl),
+                    ["BrandImageUrl"] = Html(_settings.BrandImageUrl)
+                });
+
+            return await SendAsync(toEmail, resolved.Subject, resolved.Html);
         }
 
         public async Task<EmailDeliveryResult> SendUserWelcomeEmailAsync(
@@ -79,19 +98,42 @@ namespace GymManagementBackend.Services
             var safeLogin = Html(loginId);
             var safePassword = Html(temporaryPassword);
             var safeGym = Html(gymName);
+            var (headline, bodyText) = ResolveRoleCopy(role);
 
-            var subject = $"Your {role} account is ready";
-            var html = $@"
-                <div style='font-family:Segoe UI,Arial,sans-serif;line-height:1.55'>
-                  <h2>Welcome to Gym Manager</h2>
+            var fallbackSubject = $"Your {role} account is ready";
+            var fallbackHtml = $@"
+                <div style='font-family:Segoe UI,Arial,sans-serif;line-height:1.55;color:#12263f'>
+                  <h2 style='margin:0 0 8px'>Welcome to Gym Manager</h2>
                   <p>Hi {safeName},</p>
-                  <p>Your <strong>{safeRole}</strong> account for <strong>{safeGym}</strong> has been created.</p>
-                  <p><strong>User ID:</strong> {safeLogin}</p>
-                  <p><strong>Temporary Password:</strong> {safePassword}</p>
-                  <p>Please change your password after first login.</p>
+                  <p>{headline}</p>
+                  <p>{bodyText}</p>
+                  <div style='background:#f7fafe;border:1px solid #d9e6ff;border-radius:12px;padding:12px 14px'>
+                    <p style='margin:0 0 6px'><strong>Gym:</strong> {safeGym}</p>
+                    <p style='margin:0 0 6px'><strong>Role:</strong> {safeRole}</p>
+                    <p style='margin:0 0 6px'><strong>User ID:</strong> {safeLogin}</p>
+                    <p style='margin:0'><strong>Temporary Password:</strong> {safePassword}</p>
+                  </div>
+                  <p style='margin-top:10px'><a href='{Html(_settings.LoginUrl)}' style='color:#0b7a75;font-weight:700'>Sign in now</a> and change your password immediately.</p>
                 </div>";
 
-            return await SendAsync(toEmail, subject, html);
+            var resolved = await ResolveEmailContentAsync(
+                "user_welcome",
+                fallbackSubject,
+                fallbackHtml,
+                new Dictionary<string, string>
+                {
+                    ["FullName"] = safeName,
+                    ["Role"] = safeRole,
+                    ["LoginId"] = safeLogin,
+                    ["TemporaryPassword"] = safePassword,
+                    ["GymName"] = safeGym,
+                    ["Headline"] = Html(headline),
+                    ["BodyText"] = Html(bodyText),
+                    ["LoginUrl"] = Html(_settings.LoginUrl),
+                    ["BrandImageUrl"] = Html(_settings.BrandImageUrl)
+                });
+
+            return await SendAsync(toEmail, resolved.Subject, resolved.Html);
         }
 
         public async Task<EmailDeliveryResult> SendMemberWelcomeEmailAsync(
@@ -111,18 +153,34 @@ namespace GymManagementBackend.Services
             var safePassword = Html(temporaryPassword);
             var safeGym = Html(gymName);
 
-            var subject = "Your Gym Member Access Details";
-            var html = $@"
-                <div style='font-family:Segoe UI,Arial,sans-serif;line-height:1.55'>
-                  <h2>Welcome to {safeGym}</h2>
+            var fallbackSubject = "Your Gym Member Access Details";
+            var fallbackHtml = $@"
+                <div style='font-family:Segoe UI,Arial,sans-serif;line-height:1.55;color:#12263f'>
+                  <h2 style='margin:0 0 8px'>Welcome to {safeGym}</h2>
                   <p>Hi {safeName},</p>
                   <p>Your member profile has been created.</p>
-                  <p><strong>User ID:</strong> {safeLogin}</p>
-                  <p><strong>Temporary Password:</strong> {safePassword}</p>
-                  <p>Please keep these credentials safe. Password reset email flow can be enabled next.</p>
+                  <div style='background:#f7fafe;border:1px solid #d9e6ff;border-radius:12px;padding:12px 14px'>
+                    <p style='margin:0 0 6px'><strong>User ID:</strong> {safeLogin}</p>
+                    <p style='margin:0'><strong>Temporary Password:</strong> {safePassword}</p>
+                  </div>
+                  <p style='margin-top:10px'><a href='{Html(_settings.LoginUrl)}' style='color:#0b7a75;font-weight:700'>Sign in here</a> and change your password after login.</p>
                 </div>";
 
-            return await SendAsync(toEmail, subject, html);
+            var resolved = await ResolveEmailContentAsync(
+                "member_welcome",
+                fallbackSubject,
+                fallbackHtml,
+                new Dictionary<string, string>
+                {
+                    ["FullName"] = safeName,
+                    ["LoginId"] = safeLogin,
+                    ["TemporaryPassword"] = safePassword,
+                    ["GymName"] = safeGym,
+                    ["LoginUrl"] = Html(_settings.LoginUrl),
+                    ["BrandImageUrl"] = Html(_settings.BrandImageUrl)
+                });
+
+            return await SendAsync(toEmail, resolved.Subject, resolved.Html);
         }
 
         private bool CanSend(string? toEmail, out string reason)
@@ -228,6 +286,68 @@ namespace GymManagementBackend.Services
             }
 
             return body;
+        }
+
+        private static (string Headline, string Body) ResolveRoleCopy(string role)
+        {
+            var normalized = (role ?? string.Empty).Trim().ToUpperInvariant();
+            return normalized switch
+            {
+                "OWNER" => ("Your owner access is live.", "You can manage your gym team, members, plans, and dashboards."),
+                "TRAINER" => ("Your trainer access is live.", "You can manage member progress, attendance, and personal training workflows."),
+                "STAFF" => ("Your staff account is ready.", "You can help with operations, onboarding, and day-to-day gym workflows."),
+                "MEMBER" => ("Your member access is ready.", "You can log attendance and track your fitness journey inside the app."),
+                _ => ("Your account has been created.", "Use the credentials below to sign in.")
+            };
+        }
+
+        private async Task<(string Subject, string Html)> ResolveEmailContentAsync(
+            string templateKey,
+            string fallbackSubject,
+            string fallbackHtml,
+            IReadOnlyDictionary<string, string> tokens)
+        {
+            var template = await _context.EmailTemplates
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.TemplateKey == templateKey && t.IsActive);
+
+            if (template is null)
+            {
+                return (fallbackSubject, fallbackHtml);
+            }
+
+            var resolvedLoginUrl = !string.IsNullOrWhiteSpace(template.LoginUrl)
+                ? template.LoginUrl!
+                : _settings.LoginUrl;
+            var resolvedHeroImageUrl = !string.IsNullOrWhiteSpace(template.HeroImageUrl)
+                ? template.HeroImageUrl!
+                : _settings.BrandImageUrl;
+
+            var mergedTokens = new Dictionary<string, string>(tokens, StringComparer.Ordinal)
+            {
+                ["LoginUrl"] = Html(resolvedLoginUrl),
+                ["BrandImageUrl"] = Html(resolvedHeroImageUrl)
+            };
+
+            var subject = ReplaceTokens(template.SubjectTemplate, mergedTokens);
+            var html = ReplaceTokens(template.HtmlTemplate, mergedTokens);
+
+            if (!string.IsNullOrWhiteSpace(resolvedHeroImageUrl))
+            {
+                html = $"<div style='margin-bottom:12px'><img src='{Html(resolvedHeroImageUrl)}' alt='Gym Manager' style='max-width:100%;border-radius:12px'/></div>" + html;
+            }
+
+            return (subject, html);
+        }
+
+        private static string ReplaceTokens(string template, IReadOnlyDictionary<string, string> tokens)
+        {
+            var output = template ?? string.Empty;
+            foreach (var (key, value) in tokens)
+            {
+                output = output.Replace($"{{{key}}}", value ?? string.Empty, StringComparison.Ordinal);
+            }
+            return output;
         }
     }
 }

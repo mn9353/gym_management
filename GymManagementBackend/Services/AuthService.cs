@@ -44,35 +44,58 @@ namespace GymManagementBackend.Services
                 .Include(u => u.Gym)
                 .FirstOrDefaultAsync(u => EF.Functions.ILike(u.Email, normalizedEmail));
 
-            if (user is null || !user.IsActive || !VerifyPassword(request.Password, user.PasswordHash))
+            if (user is not null && user.IsActive && VerifyPassword(request.Password, user.PasswordHash))
             {
-                _logger.LogWarning("Failed login attempt for email: {Email}", normalizedEmail);
+                var accessToken = _jwtTokenUtil.GenerateAccessToken(user);
+                var refreshTokenValue = _jwtTokenUtil.GenerateRefreshToken();
+                var refreshToken = BuildRefreshTokenEntity(user.Id, refreshTokenValue, ipAddress);
+
+                user.LastLoginAt = DateTime.UtcNow;
+
+                _context.RefreshTokens.Add(refreshToken);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("User logged in successfully: {UserId}", user.Id);
+
                 return new LoginResponse
                 {
-                    Success = false,
-                    Message = "Invalid email or password"
+                    Success = true,
+                    Message = "Login successful",
+                    User = MapUserToDto(user),
+                    AccessToken = accessToken,
+                    RefreshToken = refreshTokenValue,
+                    ExpiresIn = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes)
                 };
             }
 
-            var accessToken = _jwtTokenUtil.GenerateAccessToken(user);
-            var refreshTokenValue = _jwtTokenUtil.GenerateRefreshToken();
-            var refreshToken = BuildRefreshTokenEntity(user.Id, refreshTokenValue, ipAddress);
+            var member = await _context.Members
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m =>
+                    m.Email != null
+                    && EF.Functions.ILike(m.Email, normalizedEmail)
+                    && m.PasswordHash != null);
 
-            user.LastLoginAt = DateTime.UtcNow;
+            if (member is not null && !string.IsNullOrWhiteSpace(member.PasswordHash) && VerifyPassword(request.Password, member.PasswordHash))
+            {
+                var accessToken = _jwtTokenUtil.GenerateMemberAccessToken(member);
+                _logger.LogInformation("Member logged in successfully: {MemberId}", member.Id);
 
-            _context.RefreshTokens.Add(refreshToken);
-            await _context.SaveChangesAsync();
+                return new LoginResponse
+                {
+                    Success = true,
+                    Message = "Login successful",
+                    User = MapMemberToUserDto(member),
+                    AccessToken = accessToken,
+                    RefreshToken = null,
+                    ExpiresIn = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes)
+                };
+            }
 
-            _logger.LogInformation("User logged in successfully: {UserId}", user.Id);
-
+            _logger.LogWarning("Failed login attempt for email: {Email}", normalizedEmail);
             return new LoginResponse
             {
-                Success = true,
-                Message = "Login successful",
-                User = MapUserToDto(user),
-                AccessToken = accessToken,
-                RefreshToken = refreshTokenValue,
-                ExpiresIn = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes)
+                Success = false,
+                Message = "Invalid email or password"
             };
         }
 
@@ -139,7 +162,17 @@ namespace GymManagementBackend.Services
             var user = await _context.Users
                 .Include(u => u.Gym)
                 .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
-            return user is null ? null : MapUserToDto(user);
+            if (user is not null)
+            {
+                return MapUserToDto(user);
+            }
+
+            var member = await _context.Members
+                .AsNoTracking()
+                .Include(m => m.Gym)
+                .FirstOrDefaultAsync(m => m.Id == userId);
+
+            return member is null ? null : MapMemberToUserDto(member);
         }
 
         private RefreshToken BuildRefreshTokenEntity(Guid userId, string plainToken, string? ipAddress)
@@ -179,6 +212,23 @@ namespace GymManagementBackend.Services
                 IsActive = user.IsActive,
                 ProfileImageUrl = user.ProfileImageUrl,
                 CreatedAt = user.CreatedAt
+            };
+        }
+
+        private static UserDto MapMemberToUserDto(Member member)
+        {
+            return new UserDto
+            {
+                Id = member.Id,
+                GymId = member.GymId,
+                GymName = member.Gym?.GymName,
+                FullName = member.FullName,
+                Email = member.Email ?? string.Empty,
+                Phone = member.Phone,
+                Role = "MEMBER",
+                IsActive = true,
+                ProfileImageUrl = member.ProfileImageUrl,
+                CreatedAt = member.CreatedAt
             };
         }
     }

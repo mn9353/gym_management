@@ -4,6 +4,7 @@ using GymManagementBackend.DTOs;
 using GymManagementBackend.Models;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 
 namespace GymManagementBackend.Services
 {
@@ -177,13 +178,14 @@ namespace GymManagementBackend.Services
                 IsActive = true
             };
 
-            var ownerUsers = request.Owners.Select(o => new User
+            var ownerPasswords = request.Owners.Select(_ => GenerateTemporaryPassword()).ToList();
+            var ownerUsers = request.Owners.Select((o, index) => new User
             {
                 GymId = gym.Id,
                 FullName = o.FullName.Trim(),
                 Email = o.Email.Trim().ToLowerInvariant(),
                 Phone = o.Phone?.Trim(),
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(o.Password),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(ownerPasswords[index]),
                 Role = AppRoles.Owner,
                 IsActive = true
             }).ToList();
@@ -201,13 +203,12 @@ namespace GymManagementBackend.Services
             for (var i = 0; i < ownerUsers.Count; i++)
             {
                 var ownerUser = ownerUsers[i];
-                var ownerRequest = request.Owners[i];
                 var result = await _emailNotificationService.SendUserWelcomeEmailAsync(
                     ownerUser.Email,
                     ownerUser.FullName,
                     ownerUser.Role,
                     ownerUser.Email,
-                    ownerRequest.Password,
+                    ownerPasswords[i],
                     gym.GymName);
                 ownerMailStatuses.Add(result);
             }
@@ -313,13 +314,14 @@ namespace GymManagementBackend.Services
                 await EnsureOwnerCapacityAsync(request.GymId, 1);
             }
 
+            var temporaryPassword = GenerateTemporaryPassword();
             var user = new User
             {
                 GymId = request.GymId,
                 FullName = request.FullName.Trim(),
                 Email = normalizedEmail,
                 Phone = request.Phone?.Trim(),
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(temporaryPassword),
                 Role = role,
                 IsActive = true
             };
@@ -337,7 +339,7 @@ namespace GymManagementBackend.Services
                 user.FullName,
                 user.Role,
                 user.Email,
-                request.Password,
+                temporaryPassword,
                 gymName);
             var dto = MapUser(user);
             dto.WelcomeEmailSent = emailResult.Success;
@@ -365,13 +367,14 @@ namespace GymManagementBackend.Services
                 throw new InvalidOperationException("Owners can only create STAFF or TRAINER users.");
             }
 
+            var temporaryPassword = GenerateTemporaryPassword();
             var user = new User
             {
                 GymId = gymId,
                 FullName = request.FullName.Trim(),
                 Email = normalizedEmail,
                 Phone = request.Phone?.Trim(),
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(temporaryPassword),
                 Role = role,
                 IsActive = true
             };
@@ -389,7 +392,7 @@ namespace GymManagementBackend.Services
                 user.FullName,
                 user.Role,
                 user.Email,
-                request.Password,
+                temporaryPassword,
                 gymName);
             var dto = MapUser(user);
             dto.WelcomeEmailSent = emailResult.Success;
@@ -632,6 +635,34 @@ namespace GymManagementBackend.Services
             {
                 throw new InvalidOperationException("Each gym can have at most 2 owners.");
             }
+        }
+
+        private static string GenerateTemporaryPassword()
+        {
+            const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+            const string lower = "abcdefghijkmnpqrstuvwxyz";
+            const string digits = "23456789";
+            const string special = "@#$%&*!";
+            var all = upper + lower + digits + special;
+
+            Span<char> password = stackalloc char[10];
+            password[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+            password[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+            password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+            password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+
+            for (var i = 4; i < password.Length; i++)
+            {
+                password[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
+            }
+
+            for (var i = password.Length - 1; i > 0; i--)
+            {
+                var j = RandomNumberGenerator.GetInt32(i + 1);
+                (password[i], password[j]) = (password[j], password[i]);
+            }
+
+            return new string(password);
         }
     }
 }

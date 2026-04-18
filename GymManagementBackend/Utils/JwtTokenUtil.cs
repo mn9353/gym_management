@@ -47,6 +47,33 @@ namespace GymManagementBackend.Utils
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
+        public string GenerateMemberAccessToken(Member member)
+        {
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Secret));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, member.Id.ToString()),
+                new Claim(ClaimTypes.Email, member.Email ?? string.Empty),
+                new Claim(ClaimTypes.Name, member.FullName),
+                new Claim(ClaimTypes.Role, "MEMBER"),
+                new Claim("role", "MEMBER"),
+                new Claim("gym_id", member.GymId.ToString()),
+                new Claim("member_id", member.Id.ToString())
+            };
+
+            var token = new JwtSecurityToken(
+                issuer: _jwtSettings.Issuer,
+                audience: _jwtSettings.Audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes),
+                signingCredentials: credentials
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
         public string GenerateRefreshToken()
         {
             var randomNumber = new byte[32];

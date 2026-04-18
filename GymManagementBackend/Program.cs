@@ -92,6 +92,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("OwnerOrAdmin", policy => policy.RequireRole(AppRoles.Owner, AppRoles.Admin));
     options.AddPolicy("StaffOrAbove", policy => policy.RequireRole(AppRoles.Staff, AppRoles.Trainer, AppRoles.Owner, AppRoles.Admin));
     options.AddPolicy("TrainerOrAbove", policy => policy.RequireRole(AppRoles.Trainer, AppRoles.Staff, AppRoles.Owner, AppRoles.Admin));
+    options.AddPolicy("MemberOnly", policy => policy.RequireRole(AppRoles.Member));
 });
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -147,6 +148,7 @@ builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IEnquiryService, EnquiryService>();
+builder.Services.AddScoped<IMemberPortalService, MemberPortalService>();
 builder.Services.AddScoped<IEmailNotificationService, EmailNotificationService>();
 builder.Services.AddHostedService<MembershipStatusSyncBackgroundService>();
 

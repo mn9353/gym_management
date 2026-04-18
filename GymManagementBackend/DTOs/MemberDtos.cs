@@ -55,6 +55,7 @@ namespace GymManagementBackend.DTOs
 
         public decimal? Height { get; set; }
         public decimal? Weight { get; set; }
+        public decimal? TargetWeight { get; set; }
 
         [StringLength(255)]
         public string? FitnessGoal { get; set; }
@@ -214,6 +215,7 @@ namespace GymManagementBackend.DTOs
 
         public decimal? Height { get; set; }
         public decimal? Weight { get; set; }
+        public decimal? TargetWeight { get; set; }
 
         [StringLength(255)]
         public string? FitnessGoal { get; set; }
@@ -247,6 +249,7 @@ namespace GymManagementBackend.DTOs
         public string? EmergencyContact { get; set; }
         public decimal? Height { get; set; }
         public decimal? Weight { get; set; }
+        public decimal? TargetWeight { get; set; }
         public string? FitnessGoal { get; set; }
         public string? TrainerAssigned { get; set; }
         public string? LeadSource { get; set; }

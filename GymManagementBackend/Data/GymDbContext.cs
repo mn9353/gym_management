@@ -25,8 +25,10 @@ namespace GymManagementBackend.Data
         public DbSet<MemberCheckin> MemberCheckins { get; set; }
         public DbSet<AttendancePolicy> AttendancePolicies { get; set; }
         public DbSet<MemberBodyMetric> MemberBodyMetrics { get; set; }
+        public DbSet<MemberWorkoutLog> MemberWorkoutLogs { get; set; }
         public DbSet<LoginEvent> LoginEvents { get; set; }
         public DbSet<NotificationOutbox> NotificationOutboxes { get; set; }
+        public DbSet<EmailTemplate> EmailTemplates { get; set; }
         public DbSet<Enquiry> Enquiries { get; set; }
         public DbSet<EnquiryFollowup> EnquiryFollowups { get; set; }
         public DbSet<EnquiryStageHistory> EnquiryStageHistories { get; set; }
@@ -274,6 +276,14 @@ namespace GymManagementBackend.Data
                 .HasForeignKey(x => x.MemberId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<MemberWorkoutLog>()
+                .HasIndex(x => new { x.GymId, x.MemberId, x.WorkoutDate });
+
+            modelBuilder.Entity<MemberWorkoutLog>()
+                .HasIndex(x => x.CheckinId)
+                .IsUnique()
+                .HasFilter("\"checkin_id\" IS NOT NULL");
+
             modelBuilder.Entity<AttendancePolicy>()
                 .HasIndex(x => new { x.GymId, x.IsActive });
 
@@ -294,6 +304,10 @@ namespace GymManagementBackend.Data
                 .HasIndex(x => x.IdempotencyKey)
                 .IsUnique()
                 .HasFilter("\"idempotency_key\" IS NOT NULL");
+
+            modelBuilder.Entity<EmailTemplate>()
+                .HasIndex(x => x.TemplateKey)
+                .IsUnique();
 
             // Enquiry CRM
             modelBuilder.Entity<Enquiry>()
