@@ -13,7 +13,7 @@ namespace GymManagementBackend.Services
         Task<List<MonthlyMemberFlowDto>> GetMonthlyMemberFlowAsync(Guid gymId, int months = 6);
         Task<List<RecentMemberDto>> GetRecentMembersAsync(Guid gymId, int limit = 5);
         Task<List<WeeklyMemberGrowthDto>> GetWeeklyGrowthAsync(Guid gymId, int weeks = 4);
-        Task<List<IrregularMemberDto>> GetIrregularMembersAsync(Guid gymId, int minAbsentDays = 4, int limit = 100);
+        Task<PaginatedIrregularMembersDto> GetIrregularMembersAsync(Guid gymId, int minAbsentDays = 4, int pageNumber = 1, int pageSize = 10);
     }
 
     public class DashboardService : IDashboardService
@@ -61,6 +61,9 @@ namespace GymManagementBackend.Services
                 var lastMonthStart = lastMonth;
                 var nextWeek = today.AddDays(7);
 
+                var gymPlan = await _context.Gyms.Where(g => g.Id == gymId).Select(g => g.SubscriptionPlan).FirstOrDefaultAsync();
+                bool isBasic = string.Equals(gymPlan, "basic", StringComparison.OrdinalIgnoreCase);
+
                 var stats = new DashboardStatsDto();
 
                 // Total active members (date-driven; paused members are excluded)
@@ -86,7 +89,7 @@ namespace GymManagementBackend.Services
                                       m.JoinDate >= DateOnly.FromDateTime(lastMonth) &&
                                       m.JoinDate < DateOnly.FromDateTime(currentMonth));
 
-                // Revenue this month
+                // Revenue calculations
                 stats.RevenueThisMonth = (await _context.Payments
                     .Where(p => p.GymId == gymId && 
                                 p.PaymentDate >= DateOnly.FromDateTime(currentMonth) &&
@@ -182,6 +185,9 @@ namespace GymManagementBackend.Services
                 months = Math.Clamp(months, 1, 24);
                 var trends = new List<MonthlyRevenueTrendDto>();
 
+                var gymPlan = await _context.Gyms.Where(g => g.Id == gymId).Select(g => g.SubscriptionPlan).FirstOrDefaultAsync();
+                bool isBasic = string.Equals(gymPlan, "basic", StringComparison.OrdinalIgnoreCase);
+
                 for (int i = months - 1; i >= 0; i--)
                 {
                     var month = DateTime.UtcNow.AddMonths(-i);
@@ -189,11 +195,11 @@ namespace GymManagementBackend.Services
                     var monthEnd = monthStart.AddMonths(1);
 
                     var revenue = (await _context.Payments
-                        .Where(p => p.GymId == gymId
-                                    && p.PaymentDate >= DateOnly.FromDateTime(monthStart)
-                                    && p.PaymentDate < DateOnly.FromDateTime(monthEnd))
-                        .Select(p => (decimal?)p.Amount)
-                        .SumAsync()) ?? 0m;
+                            .Where(p => p.GymId == gymId
+                                        && p.PaymentDate >= DateOnly.FromDateTime(monthStart)
+                                        && p.PaymentDate < DateOnly.FromDateTime(monthEnd))
+                            .Select(p => (decimal?)p.Amount)
+                            .SumAsync()) ?? 0m;
 
                     trends.Add(new MonthlyRevenueTrendDto
                     {
@@ -365,12 +371,16 @@ ORDER BY m.month_start;";
             }
         }
 
-        public async Task<List<IrregularMemberDto>> GetIrregularMembersAsync(Guid gymId, int minAbsentDays = 4, int limit = 100)
+        public async Task<PaginatedIrregularMembersDto> GetIrregularMembersAsync(Guid gymId, int minAbsentDays = 4, int pageNumber = 1, int pageSize = 10)
         {
             minAbsentDays = Math.Clamp(minAbsentDays, 1, 60);
-            limit = Math.Clamp(limit, 1, 500);
+            pageNumber = Math.Max(1, pageNumber);
+            pageSize = Math.Clamp(pageSize, 1, 100);
 
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            
+            // Get all checkins for the gym to calculate absence
+            // Optimization: We only need the latest checkin per member
             var lastCheckins = await _context.MemberCheckins
                 .AsNoTracking()
                 .Where(x => x.GymId == gymId)
@@ -382,18 +392,13 @@ ORDER BY m.month_start;";
                 })
                 .ToDictionaryAsync(x => x.MemberId, x => (DateOnly?)x.LastCheckinDate);
 
-            var members = await _context.Members
+            // Fetch members and calculate absence in memory
+            // This is still partially in-memory because of the complex absence logic
+            var membersQuery = _context.Members
                 .AsNoTracking()
-                .Where(m => m.GymId == gymId && m.Status != "PAUSED")
-                .Select(m => new
-                {
-                    m.Id,
-                    m.FullName,
-                    m.JoinDate,
-                    m.PlanEndDate,
-                    m.Status
-                })
-                .ToListAsync();
+                .Where(m => m.GymId == gymId && m.Status == "ACTIVE");
+
+            var members = await membersQuery.ToListAsync();
 
             var irregular = members
                 .Select(m =>
@@ -409,16 +414,28 @@ ORDER BY m.month_start;";
                         LastCheckinDate = last,
                         DaysAbsent = daysAbsent,
                         PlanEndDate = m.PlanEndDate,
-                        Status = m.Status
+                        Status = m.Status,
+                        Phone = m.Phone,
+                        ProfileImageUrl = m.ProfileImageUrl
                     };
                 })
                 .Where(x => x.DaysAbsent >= minAbsentDays)
                 .OrderByDescending(x => x.DaysAbsent)
-                .ThenBy(x => x.FullName)
-                .Take(limit)
+                .ThenBy(x => x.FullName);
+
+            var totalCount = irregular.Count();
+            var items = irregular
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .ToList();
 
-            return irregular;
+            return new PaginatedIrregularMembersDto
+            {
+                Items = items,
+                TotalCount = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
         }
     }
 }

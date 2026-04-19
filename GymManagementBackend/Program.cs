@@ -208,6 +208,7 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IEnquiryService, EnquiryService>();
 builder.Services.AddScoped<IMemberPortalService, MemberPortalService>();
 builder.Services.AddScoped<IEmailNotificationService, EmailNotificationService>();
+builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddHostedService<MembershipStatusSyncBackgroundService>();
 
 builder.Services.AddControllers();

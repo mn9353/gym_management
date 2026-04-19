@@ -67,6 +67,7 @@ namespace GymManagementBackend.DTOs
         public string? LeadSource { get; set; }
 
         public string? Notes { get; set; }
+        public string? ProfileImageUrl { get; set; }
     }
 
     public class RenewMemberDto
@@ -157,7 +158,7 @@ namespace GymManagementBackend.DTOs
         public decimal PendingAmount { get; set; }
         public string PaymentStatus { get; set; } = string.Empty;
         public DateOnly? LastPaymentDate { get; set; }
-        public PaymentTransactionDto Payment { get; set; } = new();
+        public PaymentTransactionDto? Payment { get; set; }
     }
 
     public class MemberRenewalUpdateDto
@@ -224,6 +225,7 @@ namespace GymManagementBackend.DTOs
         public string? TrainerAssigned { get; set; }
 
         public string? Notes { get; set; }
+        public string? ProfileImageUrl { get; set; }
     }
 
     public class MemberDto

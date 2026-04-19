@@ -69,7 +69,17 @@ namespace GymManagementBackend.DTOs
         public DateOnly JoinDate { get; set; }
         public DateOnly? LastCheckinDate { get; set; }
         public int DaysAbsent { get; set; }
+        public string? Phone { get; set; }
+        public string? ProfileImageUrl { get; set; }
         public DateOnly PlanEndDate { get; set; }
         public string Status { get; set; } = string.Empty;
+    }
+
+    public class PaginatedIrregularMembersDto
+    {
+        public List<IrregularMemberDto> Items { get; set; } = [];
+        public int TotalCount { get; set; }
+        public int PageNumber { get; set; }
+        public int PageSize { get; set; }
     }
 }

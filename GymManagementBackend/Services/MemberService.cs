@@ -88,6 +88,9 @@ namespace GymManagementBackend.Services
         {
             try
             {
+                var gym = await _context.Gyms.FirstOrDefaultAsync(g => g.Id == gymId);
+                if (gym == null) throw new KeyNotFoundException("Gym not found");
+
                 var duplicateMember = await FindDuplicateMemberAsync(gymId, createMemberDto.Phone, createMemberDto.Email);
                 if (duplicateMember is not null)
                 {
@@ -154,6 +157,7 @@ namespace GymManagementBackend.Services
                     TrainerAssigned = trainerAssigned,
                     LeadSource = createMemberDto.LeadSource?.Trim(),
                     Notes = createMemberDto.Notes?.Trim(),
+                    ProfileImageUrl = createMemberDto.ProfileImageUrl,
                     Status = ResolveStatusFromPlanEndDate(planEndDate)
                 };
 
@@ -197,10 +201,7 @@ namespace GymManagementBackend.Services
 
                 if (!string.IsNullOrWhiteSpace(normalizedEmail) && !string.IsNullOrWhiteSpace(temporaryPassword))
                 {
-                    var gymName = await _context.Gyms
-                        .Where(g => g.Id == gymId)
-                        .Select(g => g.GymName)
-                        .FirstOrDefaultAsync() ?? "Gym";
+                    var gymName = gym.GymName ?? "Gym";
 
                     emailResult = await _emailNotificationService.SendMemberWelcomeEmailAsync(
                         normalizedEmail,
@@ -234,6 +235,8 @@ namespace GymManagementBackend.Services
         {
             try
             {
+                var gym = await _context.Gyms.FirstOrDefaultAsync(g => g.Id == gymId);
+
                 var member = await _context.Members
                     .FirstOrDefaultAsync(m => m.Id == memberId && m.GymId == gymId);
 
@@ -263,21 +266,29 @@ namespace GymManagementBackend.Services
                 member.UpdatedAt = GetDbTimestampNow();
 
                 var paymentAmount = renewMemberDto.AmountPaid ?? member.AmountPaid ?? 0m;
-                var payment = new Payment
+                Payment? payment = null;
+                if (paymentAmount > 0m)
                 {
-                    GymId = gymId,
-                    MemberId = member.Id,
-                    Amount = paymentAmount,
-                    PaymentDate = paymentDate,
-                    PaymentMode = NormalizePaymentMode(renewMemberDto.PaymentMode),
-                    PlanDurationMonths = renewMemberDto.PlanDurationMonths,
-                    Remarks = renewMemberDto.Remarks?.Trim(),
-                    CreatedAt = GetDbTimestampNow()
-                };
+                    payment = new Payment
+                    {
+                        GymId = gymId,
+                        MemberId = member.Id,
+                        Amount = paymentAmount,
+                        PaymentDate = paymentDate,
+                        PaymentMode = NormalizePaymentMode(renewMemberDto.PaymentMode),
+                        PlanDurationMonths = renewMemberDto.PlanDurationMonths,
+                        Remarks = renewMemberDto.Remarks?.Trim(),
+                        CreatedAt = GetDbTimestampNow()
+                    };
+                }
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                _context.Payments.Add(payment);
+                if (payment != null)
+                {
+                    _context.Payments.Add(payment);
+                }
+
                 await CreateSubscriptionLedgerForCycleAsync(
                     member,
                     renewMemberDto.PlanStartDate,
@@ -285,7 +296,7 @@ namespace GymManagementBackend.Services
                     renewMemberDto.PlanDurationMonths,
                     member.AmountToPay,
                     paymentAmount,
-                    paymentAmount > 0m ? payment : null,
+                    payment,
                     renewMemberDto.Remarks?.Trim() ?? "Renewal");
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
@@ -327,7 +338,7 @@ namespace GymManagementBackend.Services
                 var pendingAmount = amountToPay > 0m ? Math.Max(0m, amountToPay - nextPaid) : 0m;
                 var paymentStatus = ResolvePaymentStatus(nextPaid, member.AmountToPay);
 
-                var payment = new Payment
+                Payment payment = new Payment
                 {
                     GymId = gymId,
                     MemberId = member.Id,
@@ -346,7 +357,10 @@ namespace GymManagementBackend.Services
                 member.LastPaymentDate = paymentDate;
                 member.UpdatedAt = GetDbTimestampNow();
 
-                _context.Payments.Add(payment);
+                if (payment != null)
+                {
+                    _context.Payments.Add(payment);
+                }
                 await ApplyPaymentToCurrentLedgerAsync(member, paymentAmount, payment);
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
@@ -359,7 +373,7 @@ namespace GymManagementBackend.Services
                     PendingAmount = pendingAmount,
                     PaymentStatus = member.PaymentStatus,
                     LastPaymentDate = member.LastPaymentDate,
-                    Payment = new PaymentTransactionDto
+                    Payment = payment == null ? null : new PaymentTransactionDto
                     {
                         Id = payment.Id,
                         Amount = payment.Amount,
@@ -406,7 +420,7 @@ namespace GymManagementBackend.Services
                     throw new InvalidOperationException($"Overpayment not allowed. Remaining amount is {remaining:0.##}.");
                 }
 
-                var payment = new Payment
+                Payment payment = new Payment
                 {
                     GymId = gymId,
                     MemberId = member.Id,
@@ -415,16 +429,18 @@ namespace GymManagementBackend.Services
                     PaymentMode = paymentMode,
                     PlanDurationMonths = GetPlanDurationMonths(member.PlanStartDate, member.PlanEndDate),
                     Remarks = ownerPaymentUpdateDto.Remarks?.Trim(),
-                    CreatedAt = GetDbTimestampNow()
+                    CreatedAt = EnsureUtc(GetDbTimestampNow())
                 };
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
                 var nextPaymentStatus = ResolvePaymentStatus(nextPaid, member.AmountToPay);
                 var updatedAt = EnsureUtc(GetDbTimestampNow());
-                payment.CreatedAt = EnsureUtc(payment.CreatedAt);
 
-                _context.Payments.Add(payment);
+                if (payment != null)
+                {
+                    _context.Payments.Add(payment);
+                }
                 await ApplyPaymentToCurrentLedgerAsync(member, amountPaidNow, payment);
                 await _context.SaveChangesAsync();
 
@@ -447,7 +463,7 @@ namespace GymManagementBackend.Services
                     PendingAmount = pendingAmount,
                     PaymentStatus = nextPaymentStatus,
                     LastPaymentDate = paymentDate,
-                    Payment = new PaymentTransactionDto
+                    Payment = payment == null ? null : new PaymentTransactionDto
                     {
                         Id = payment.Id,
                         Amount = payment.Amount,
@@ -464,8 +480,7 @@ namespace GymManagementBackend.Services
                 throw;
             }
         }
-
-        public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid gymId, Guid memberId, OwnerRenewMemberDto ownerRenewMemberDto)
+public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid gymId, Guid memberId, OwnerRenewMemberDto ownerRenewMemberDto)
         {
             try
             {
@@ -702,6 +717,9 @@ namespace GymManagementBackend.Services
 
                 if (!string.IsNullOrEmpty(updateMemberDto.Notes))
                     member.Notes = updateMemberDto.Notes;
+
+                if (updateMemberDto.ProfileImageUrl != null)
+                    member.ProfileImageUrl = updateMemberDto.ProfileImageUrl;
 
                 member.UpdatedAt = GetDbTimestampNow();
                 await _context.SaveChangesAsync();
