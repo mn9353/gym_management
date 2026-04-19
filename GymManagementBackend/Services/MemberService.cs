@@ -206,7 +206,12 @@ namespace GymManagementBackend.Services
                         member.FullName,
                         normalizedEmail,
                         temporaryPassword,
-                        gymName);
+                        gymName,
+                        member.JoinDate,
+                        member.PlanEndDate,
+                        member.AmountToPay ?? 0m,
+                        member.AmountPaid ?? 0m,
+                        member.PaymentStatus ?? "PENDING");
                 }
 
                 var dto = MapMemberToDto(member);
