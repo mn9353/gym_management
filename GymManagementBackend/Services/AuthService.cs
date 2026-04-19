@@ -106,7 +106,6 @@ namespace GymManagementBackend.Services
 
             IQueryable<Member> memberQuery = _context.Members
                 .AsNoTracking()
-                .Include(m => m.Gym)
                 .AsQueryable();
             if (isEmail)
             {
@@ -129,6 +128,9 @@ namespace GymManagementBackend.Services
 
             if (member is not null && !string.IsNullOrWhiteSpace(member.PasswordHash) && VerifyPassword(request.Password, member.PasswordHash))
             {
+                // Explicitly load Gym to avoid INNER JOIN filtering issues
+                member.Gym = await _context.Gyms.FirstOrDefaultAsync(g => g.Id == member.GymId);
+
                 var accessToken = _jwtTokenUtil.GenerateMemberAccessToken(member);
                 _logger.LogInformation("Member logged in successfully: {MemberId}", member.Id);
 
