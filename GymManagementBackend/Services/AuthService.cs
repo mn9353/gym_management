@@ -106,6 +106,7 @@ namespace GymManagementBackend.Services
 
             IQueryable<Member> memberQuery = _context.Members
                 .AsNoTracking()
+                .Include(m => m.Gym)
                 .AsQueryable();
             if (isEmail)
             {

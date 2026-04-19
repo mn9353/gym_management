@@ -9,6 +9,7 @@ namespace GymManagementBackend.Services
     {
         Task<AttendanceResultDto> MarkAttendanceAsync(MarkAttendanceDto dto);
         Task<List<MemberAttendanceDto>> GetTodayAttendanceAsync(Guid gymId);
+        Task CleanupOldAttendanceForGymAsync(Guid gymId);
     }
 
     public class AttendanceService : IAttendanceService
@@ -131,6 +132,12 @@ namespace GymManagementBackend.Services
             {
                 _logger.LogError(ex, $"Error during attendance cleanup for gym {gymId}");
             }
+        }
+
+        // Public method to satisfy IAttendanceService interface
+        public async Task CleanupOldAttendanceForGymAsync(Guid gymId)
+        {
+            await CleanupOldAttendanceIfBasicAsync(gymId);
         }
     }
 }
