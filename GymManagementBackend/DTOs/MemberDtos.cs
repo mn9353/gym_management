@@ -369,4 +369,26 @@ namespace GymManagementBackend.DTOs
         public string Field { get; set; } = "planEndDate";
         public string Direction { get; set; } = "asc";
     }
+
+    public class SendSubscriptionReminderRequestDto
+    {
+        public bool SelectAll { get; set; } = false;
+        public List<Guid> MemberIds { get; set; } = new();
+        public string Stage { get; set; } = "EXPIRING";
+        public string Segment { get; set; } = "upcoming";
+        public MemberListQueryDto Filters { get; set; } = new();
+    }
+
+    public class SubscriptionReminderDispatchResultDto
+    {
+        public string Stage { get; set; } = string.Empty;
+        public bool SelectAll { get; set; }
+        public int RequestedCount { get; set; }
+        public int MatchedCount { get; set; }
+        public int SentCount { get; set; }
+        public int FailedCount { get; set; }
+        public int SkippedNoEmailCount { get; set; }
+        public int SkippedAlreadySentCount { get; set; }
+        public List<string> ErrorMessages { get; set; } = new();
+    }
 }

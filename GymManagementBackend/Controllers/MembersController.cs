@@ -546,6 +546,32 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpPost("subscription-reminders")]
+        public async Task<IActionResult> SendSubscriptionReminders(
+            [FromBody] SendSubscriptionReminderRequestDto request,
+            [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var result = await _memberService.SendSubscriptionRemindersAsync(effectiveGymId, request);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return this.ApiError(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending subscription reminders");
+                return this.ApiError(StatusCodes.Status500InternalServerError, "MEMBERS_ERROR", "Error sending reminders");
+            }
+        }
+
         private Guid ResolveGymId(Guid? requestedGymId)
         {
             if (User.IsAdmin())
@@ -566,5 +592,4 @@ namespace GymManagementBackend.Controllers
         }
     }
 }
-
 

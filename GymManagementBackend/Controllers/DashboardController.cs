@@ -180,5 +180,25 @@ namespace GymManagementBackend.Controllers
                 return this.ApiError(StatusCodes.Status500InternalServerError, "WEEKLY_GROWTH_ERROR", "Error getting weekly growth");
             }
         }
+
+        [HttpGet("irregular-members")]
+        public async Task<IActionResult> GetIrregularMembers([FromQuery] int minAbsentDays = 4, [FromQuery] int limit = 100, [FromQuery] Guid? gymId = null)
+        {
+            try
+            {
+                var effectiveGymId = ResolveGymId(gymId);
+                var irregularMembers = await _dashboardService.GetIrregularMembersAsync(effectiveGymId, minAbsentDays, limit);
+                return Ok(irregularMembers);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return this.ApiError(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error getting irregular members: {ex.Message}");
+                return this.ApiError(StatusCodes.Status500InternalServerError, "IRREGULAR_MEMBERS_ERROR", "Error getting irregular members");
+            }
+        }
     }
 }

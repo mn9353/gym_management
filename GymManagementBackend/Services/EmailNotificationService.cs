@@ -33,6 +33,14 @@ namespace GymManagementBackend.Services
             decimal amountPaid,
             string paymentStatus);
         Task<EmailDeliveryResult> SendPasswordResetCodeEmailAsync(string toEmail, string fullName, string code);
+        Task<EmailDeliveryResult> SendSubscriptionReminderEmailAsync(
+            string toEmail,
+            string memberName,
+            string gymName,
+            DateOnly planEndDate,
+            decimal amountToPay,
+            decimal amountPaid,
+            string stage);
     }
 
     public class EmailNotificationService : IEmailNotificationService
@@ -255,6 +263,64 @@ namespace GymManagementBackend.Services
                 });
 
             return await SendAsync(toEmail, resolved.Subject, resolved.Html);
+        }
+
+        public async Task<EmailDeliveryResult> SendSubscriptionReminderEmailAsync(
+            string toEmail,
+            string memberName,
+            string gymName,
+            DateOnly planEndDate,
+            decimal amountToPay,
+            decimal amountPaid,
+            string stage)
+        {
+            if (!CanSend(toEmail, out var reason))
+            {
+                return new EmailDeliveryResult { Success = false, Message = reason };
+            }
+
+            var safeName = Html(memberName);
+            var safeGym = Html(gymName);
+            var safePlanEndDate = Html(planEndDate.ToString("dd MMM yyyy"));
+            var safeAmountToPay = Html(amountToPay.ToString("0.00"));
+            var safeAmountPaid = Html(amountPaid.ToString("0.00"));
+            var pending = Math.Max(0m, amountToPay - amountPaid);
+            var safePending = Html(pending.ToString("0.00"));
+            var normalizedStage = (stage ?? string.Empty).Trim().ToUpperInvariant();
+
+            var isInactive = normalizedStage == "INACTIVE";
+            var subject = isInactive
+                ? $"Membership expired at {gymName}"
+                : $"Membership expiring soon at {gymName}";
+            var headline = isInactive ? "Your membership has expired" : "Your membership is expiring soon";
+            var body = isInactive
+                ? "Please renew now to continue uninterrupted access to the gym."
+                : "Please renew now to avoid interruption in your gym access.";
+
+            var html = $@"
+                <div style='margin:0;padding:24px 12px;background:#f4f7fb;font-family:Segoe UI,Arial,sans-serif;color:#0f172a'>
+                  <table role='presentation' cellspacing='0' cellpadding='0' width='100%' style='max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden'>
+                    <tr><td style='padding:18px 24px;border-bottom:1px solid #eef2f7'><div style='font-size:20px;font-weight:800;letter-spacing:.06em;color:#0f766e'>GYMMANAGER9353</div></td></tr>
+                    <tr>
+                      <td style='padding:24px'>
+                        <h1 style='margin:0 0 10px;font-size:26px;line-height:1.25;color:#0f172a'>{Html(headline)}</h1>
+                        <p style='margin:0 0 14px;font-size:15px;line-height:1.7;color:#334155'>Hi {safeName}, your plan at <strong>{safeGym}</strong> has plan end date <strong>{safePlanEndDate}</strong>. {Html(body)}</p>
+                        <div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px'>
+                          <p style='margin:0 0 6px;font-size:14px;color:#334155'><strong>Total Plan Amount:</strong> Rs {safeAmountToPay}</p>
+                          <p style='margin:0 0 6px;font-size:14px;color:#334155'><strong>Amount Paid:</strong> Rs {safeAmountPaid}</p>
+                          <p style='margin:0;font-size:14px;color:#334155'><strong>Pending Amount:</strong> Rs {safePending}</p>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style='padding:0 24px 28px;text-align:center'>
+                        <a href='{Html(_settings.LoginUrl)}' style='display:inline-block;padding:12px 24px;border-radius:999px;background:#0f766e;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700'>Open Dashboard</a>
+                      </td>
+                    </tr>
+                  </table>
+                </div>";
+
+            return await SendAsync(toEmail, subject, html);
         }
 
         private bool CanSend(string? toEmail, out string reason)

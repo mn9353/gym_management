@@ -13,6 +13,7 @@ namespace GymManagementBackend.Services
         Task<List<MonthlyMemberFlowDto>> GetMonthlyMemberFlowAsync(Guid gymId, int months = 6);
         Task<List<RecentMemberDto>> GetRecentMembersAsync(Guid gymId, int limit = 5);
         Task<List<WeeklyMemberGrowthDto>> GetWeeklyGrowthAsync(Guid gymId, int weeks = 4);
+        Task<List<IrregularMemberDto>> GetIrregularMembersAsync(Guid gymId, int minAbsentDays = 4, int limit = 100);
     }
 
     public class DashboardService : IDashboardService
@@ -362,6 +363,62 @@ ORDER BY m.month_start;";
                 _logger.LogError($"Error getting weekly growth: {ex.Message}");
                 throw;
             }
+        }
+
+        public async Task<List<IrregularMemberDto>> GetIrregularMembersAsync(Guid gymId, int minAbsentDays = 4, int limit = 100)
+        {
+            minAbsentDays = Math.Clamp(minAbsentDays, 1, 60);
+            limit = Math.Clamp(limit, 1, 500);
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var lastCheckins = await _context.MemberCheckins
+                .AsNoTracking()
+                .Where(x => x.GymId == gymId)
+                .GroupBy(x => x.MemberId)
+                .Select(g => new
+                {
+                    MemberId = g.Key,
+                    LastCheckinDate = g.Max(x => x.CheckinDate)
+                })
+                .ToDictionaryAsync(x => x.MemberId, x => (DateOnly?)x.LastCheckinDate);
+
+            var members = await _context.Members
+                .AsNoTracking()
+                .Where(m => m.GymId == gymId && m.Status != "PAUSED")
+                .Select(m => new
+                {
+                    m.Id,
+                    m.FullName,
+                    m.JoinDate,
+                    m.PlanEndDate,
+                    m.Status
+                })
+                .ToListAsync();
+
+            var irregular = members
+                .Select(m =>
+                {
+                    var last = lastCheckins.TryGetValue(m.Id, out var lastDate) ? lastDate : null;
+                    var daysFrom = last ?? m.JoinDate;
+                    var daysAbsent = Math.Max(0, today.DayNumber - daysFrom.DayNumber);
+                    return new IrregularMemberDto
+                    {
+                        Id = m.Id,
+                        FullName = m.FullName,
+                        JoinDate = m.JoinDate,
+                        LastCheckinDate = last,
+                        DaysAbsent = daysAbsent,
+                        PlanEndDate = m.PlanEndDate,
+                        Status = m.Status
+                    };
+                })
+                .Where(x => x.DaysAbsent >= minAbsentDays)
+                .OrderByDescending(x => x.DaysAbsent)
+                .ThenBy(x => x.FullName)
+                .Take(limit)
+                .ToList();
+
+            return irregular;
         }
     }
 }

@@ -61,4 +61,15 @@ namespace GymManagementBackend.DTOs
         public List<MonthlyJoinTrendDto> MonthlyTrends { get; set; } = [];
         public List<RecentMemberDto> RecentMembers { get; set; } = [];
     }
+
+    public class IrregularMemberDto
+    {
+        public Guid Id { get; set; }
+        public string FullName { get; set; } = string.Empty;
+        public DateOnly JoinDate { get; set; }
+        public DateOnly? LastCheckinDate { get; set; }
+        public int DaysAbsent { get; set; }
+        public DateOnly PlanEndDate { get; set; }
+        public string Status { get; set; } = string.Empty;
+    }
 }

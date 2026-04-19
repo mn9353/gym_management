@@ -111,6 +111,18 @@ namespace GymManagementBackend.Models
         [Column("updated_at")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("expiring_reminder_sent_at")]
+        public DateTime? ExpiringReminderSentAt { get; set; }
+
+        [Column("expiring_reminder_plan_end_date")]
+        public DateOnly? ExpiringReminderPlanEndDate { get; set; }
+
+        [Column("inactive_reminder_sent_at")]
+        public DateTime? InactiveReminderSentAt { get; set; }
+
+        [Column("inactive_reminder_plan_end_date")]
+        public DateOnly? InactiveReminderPlanEndDate { get; set; }
+
         // Navigation properties
         [ForeignKey("GymId")]
         public Gym Gym { get; set; } = null!;

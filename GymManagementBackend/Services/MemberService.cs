@@ -34,6 +34,7 @@ namespace GymManagementBackend.Services
         Task<MemberSegmentCountsDto> GetSegmentCountsAsync(Guid gymId, int upcomingDays = 7);
         Task<PagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment);
         Task<PagedResponseDto<MemberListItemDto>> GetMembersGridAsync(Guid gymId, MemberGridRequestDto request, string segment);
+        Task<SubscriptionReminderDispatchResultDto> SendSubscriptionRemindersAsync(Guid gymId, SendSubscriptionReminderRequestDto request);
     }
 
     public class MemberService : IMemberService
@@ -1048,6 +1049,130 @@ namespace GymManagementBackend.Services
             }
         }
 
+        public async Task<SubscriptionReminderDispatchResultDto> SendSubscriptionRemindersAsync(Guid gymId, SendSubscriptionReminderRequestDto request)
+        {
+            try
+            {
+                request ??= new SendSubscriptionReminderRequestDto();
+                request.Filters ??= new MemberListQueryDto();
+
+                var normalizedStage = (request.Stage ?? string.Empty).Trim().ToUpperInvariant();
+                if (normalizedStage is not ("EXPIRING" or "INACTIVE"))
+                {
+                    throw new InvalidOperationException("Stage must be either EXPIRING or INACTIVE.");
+                }
+
+                var effectiveSegment = normalizedStage == "INACTIVE" ? "inactive" : "upcoming";
+                if (!request.SelectAll && (request.MemberIds == null || request.MemberIds.Count == 0))
+                {
+                    throw new InvalidOperationException("Select at least one member or use Select All.");
+                }
+
+                var gymName = await _context.Gyms
+                    .AsNoTracking()
+                    .Where(g => g.Id == gymId)
+                    .Select(g => g.GymName)
+                    .FirstOrDefaultAsync() ?? "Gym";
+
+                var result = new SubscriptionReminderDispatchResultDto
+                {
+                    Stage = normalizedStage,
+                    SelectAll = request.SelectAll,
+                    RequestedCount = request.SelectAll ? 0 : request.MemberIds.Distinct().Count()
+                };
+
+                var targetQuery = BuildReminderTargetQuery(gymId, request.Filters, effectiveSegment);
+                List<ReminderTarget> targets;
+
+                if (request.SelectAll)
+                {
+                    targets = await targetQuery.ToListAsync();
+                    result.MatchedCount = targets.Count;
+                }
+                else
+                {
+                    var requestedIds = request.MemberIds.Distinct().ToHashSet();
+                    targets = await targetQuery
+                        .Where(m => requestedIds.Contains(m.Id))
+                        .ToListAsync();
+                    result.MatchedCount = targets.Count;
+                }
+
+                foreach (var target in targets)
+                {
+                    var alreadySentForCurrentPlan = normalizedStage switch
+                    {
+                        "EXPIRING" => target.ExpiringReminderPlanEndDate.HasValue
+                                      && target.ExpiringReminderPlanEndDate.Value == target.PlanEndDate,
+                        "INACTIVE" => target.InactiveReminderPlanEndDate.HasValue
+                                      && target.InactiveReminderPlanEndDate.Value == target.PlanEndDate,
+                        _ => false
+                    };
+
+                    if (alreadySentForCurrentPlan)
+                    {
+                        result.SkippedAlreadySentCount++;
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(target.Email))
+                    {
+                        result.SkippedNoEmailCount++;
+                        continue;
+                    }
+
+                    var sendResult = await _emailNotificationService.SendSubscriptionReminderEmailAsync(
+                        target.Email!,
+                        target.FullName,
+                        gymName,
+                        target.PlanEndDate,
+                        target.AmountToPay ?? 0m,
+                        target.AmountPaid ?? 0m,
+                        normalizedStage);
+
+                    if (sendResult.Success)
+                    {
+                        var sentAt = DateTime.UtcNow;
+                        if (normalizedStage == "EXPIRING")
+                        {
+                            await _context.Members
+                                .Where(m => m.Id == target.Id && m.GymId == gymId)
+                                .ExecuteUpdateAsync(setters => setters
+                                    .SetProperty(m => m.ExpiringReminderSentAt, sentAt)
+                                    .SetProperty(m => m.ExpiringReminderPlanEndDate, target.PlanEndDate)
+                                    .SetProperty(m => m.UpdatedAt, sentAt));
+                        }
+                        else
+                        {
+                            await _context.Members
+                                .Where(m => m.Id == target.Id && m.GymId == gymId)
+                                .ExecuteUpdateAsync(setters => setters
+                                    .SetProperty(m => m.InactiveReminderSentAt, sentAt)
+                                    .SetProperty(m => m.InactiveReminderPlanEndDate, target.PlanEndDate)
+                                    .SetProperty(m => m.UpdatedAt, sentAt));
+                        }
+
+                        result.SentCount++;
+                    }
+                    else
+                    {
+                        result.FailedCount++;
+                        if (result.ErrorMessages.Count < 5)
+                        {
+                            result.ErrorMessages.Add($"{target.FullName}: {sendResult.Message}");
+                        }
+                    }
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending subscription reminders.");
+                throw;
+            }
+        }
+
         private static MemberListQueryDto NormalizeQuery(MemberListQueryDto query)
         {
             query.PageNumber = Math.Max(1, query.PageNumber);
@@ -1318,6 +1443,41 @@ namespace GymManagementBackend.Services
             }
 
             return query;
+        }
+
+        private IQueryable<ReminderTarget> BuildReminderTargetQuery(Guid gymId, MemberListQueryDto filters, string segment)
+        {
+            var normalizedFilters = NormalizeQuery(filters);
+            var query = _context.Members
+                .AsNoTracking()
+                .Where(m => m.GymId == gymId);
+
+            query = ApplySegmentFilter(query, normalizedFilters, segment);
+            query = ApplyCommonFilters(query, normalizedFilters);
+
+            return query.Select(m => new ReminderTarget
+            {
+                Id = m.Id,
+                FullName = m.FullName,
+                Email = m.Email,
+                PlanEndDate = m.PlanEndDate,
+                AmountPaid = m.AmountPaid,
+                AmountToPay = m.AmountToPay,
+                ExpiringReminderPlanEndDate = m.ExpiringReminderPlanEndDate,
+                InactiveReminderPlanEndDate = m.InactiveReminderPlanEndDate
+            });
+        }
+
+        private sealed class ReminderTarget
+        {
+            public Guid Id { get; set; }
+            public string FullName { get; set; } = string.Empty;
+            public string? Email { get; set; }
+            public DateOnly PlanEndDate { get; set; }
+            public decimal? AmountPaid { get; set; }
+            public decimal? AmountToPay { get; set; }
+            public DateOnly? ExpiringReminderPlanEndDate { get; set; }
+            public DateOnly? InactiveReminderPlanEndDate { get; set; }
         }
 
         private static string NormalizeGridField(string field)
