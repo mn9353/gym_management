@@ -21,7 +21,17 @@ namespace GymManagementBackend.Services
     {
         Task<EmailDeliveryResult> SendGymCreatedEmailAsync(string toEmail, string gymName, string ownerName);
         Task<EmailDeliveryResult> SendUserWelcomeEmailAsync(string toEmail, string fullName, string role, string loginId, string temporaryPassword, string gymName);
-        Task<EmailDeliveryResult> SendMemberWelcomeEmailAsync(string toEmail, string memberName, string loginId, string temporaryPassword, string gymName);
+        Task<EmailDeliveryResult> SendMemberWelcomeEmailAsync(
+            string toEmail,
+            string memberName,
+            string loginId,
+            string temporaryPassword,
+            string gymName,
+            DateOnly joinDate,
+            DateOnly planEndDate,
+            decimal amountToPay,
+            decimal amountPaid,
+            string paymentStatus);
         Task<EmailDeliveryResult> SendPasswordResetCodeEmailAsync(string toEmail, string fullName, string code);
     }
 
@@ -146,7 +156,12 @@ namespace GymManagementBackend.Services
             string memberName,
             string loginId,
             string temporaryPassword,
-            string gymName)
+            string gymName,
+            DateOnly joinDate,
+            DateOnly planEndDate,
+            decimal amountToPay,
+            decimal amountPaid,
+            string paymentStatus)
         {
             if (!CanSend(toEmail, out var reason))
             {
@@ -157,6 +172,19 @@ namespace GymManagementBackend.Services
             var safeLogin = Html(loginId);
             var safePassword = Html(temporaryPassword);
             var safeGym = Html(gymName);
+            var safeJoinDate = Html(joinDate.ToString("dd MMM yyyy"));
+            var safePlanEndDate = Html(planEndDate.ToString("dd MMM yyyy"));
+            var safeAmountToPay = Html(amountToPay.ToString("0.00"));
+            var safeAmountPaid = Html(amountPaid.ToString("0.00"));
+            var normalizedStatus = (paymentStatus ?? string.Empty).Trim().ToUpperInvariant();
+            var safePaymentStatus = Html(normalizedStatus);
+            var paymentStatusLabel = normalizedStatus switch
+            {
+                "PAID" => "Paid in full",
+                "PARTIAL" => "Partially paid",
+                _ => "Pending payment"
+            };
+            var safePaymentStatusLabel = Html(paymentStatusLabel);
 
             var fallbackSubject = "Your Gym Member Access Details";
             var fallbackHtml = $@"
@@ -181,6 +209,12 @@ namespace GymManagementBackend.Services
                     ["LoginId"] = safeLogin,
                     ["TemporaryPassword"] = safePassword,
                     ["GymName"] = safeGym,
+                    ["JoinDate"] = safeJoinDate,
+                    ["PlanEndDate"] = safePlanEndDate,
+                    ["AmountToPay"] = safeAmountToPay,
+                    ["AmountPaid"] = safeAmountPaid,
+                    ["PaymentStatus"] = safePaymentStatus,
+                    ["PaymentStatusLabel"] = safePaymentStatusLabel,
                     ["LoginUrl"] = Html(_settings.LoginUrl),
                     ["BrandImageUrl"] = Html(_settings.BrandImageUrl)
                 });
@@ -400,11 +434,6 @@ namespace GymManagementBackend.Services
             var subject = ReplaceTokens(template.SubjectTemplate, mergedTokens);
             var html = ReplaceTokens(template.HtmlTemplate, mergedTokens);
 
-            if (!string.IsNullOrWhiteSpace(resolvedHeroImageUrl))
-            {
-                html = $"<div style='margin-bottom:12px'><img src='{Html(resolvedHeroImageUrl)}' alt='Gym Manager' style='max-width:100%;border-radius:12px'/></div>" + html;
-            }
-
             html += BuildEmailFooterHtml(mergedTokens);
             return (subject, html);
         }
@@ -426,12 +455,14 @@ namespace GymManagementBackend.Services
             var gymName = tokens.TryGetValue("GymName", out var gym) ? gym : string.Empty;
 
             var copyrightLine = string.IsNullOrWhiteSpace(gymName)
-                ? $"© {year} {brandName}. All rights reserved."
-                : $"© {year} {gymName}. Powered by {brandName}.";
+                ? $"&copy; {year} {brandName}. All rights reserved."
+                : $"&copy; {year} {gymName}. Powered by {brandName}.";
 
             return $@"
-                <div style='margin-top:14px;padding:12px 14px;border-radius:10px;background:#0f1b2d;color:#dbe7f5;text-align:center;font-family:Segoe UI,Arial,sans-serif'>
-                  <p style='margin:0;font-size:12px;line-height:1.5'>{copyrightLine}</p>
+                <div style='max-width:640px;margin:10px auto 0;padding:0 12px;font-family:Segoe UI,Arial,sans-serif'>
+                  <div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;text-align:center'>
+                    <p style='margin:0;font-size:11px;line-height:1.6;color:#64748b'>{copyrightLine}</p>
+                  </div>
                 </div>";
         }
     }
