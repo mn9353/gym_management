@@ -1,18 +1,52 @@
 using System.ComponentModel.DataAnnotations;
+using GymManagementBackend.Validation;
 
 namespace GymManagementBackend.DTOs
 {
     public class LoginRequest
     {
         [Required]
-        [EmailAddress]
         [MaxLength(100)]
-        public string Email { get; set; } = string.Empty;
+        public string Identifier { get; set; } = string.Empty;
 
         [Required]
         [MinLength(6)]
         [MaxLength(100)]
         public string Password { get; set; } = string.Empty;
+    }
+
+    public class ForgotPasswordRequest
+    {
+        [Required]
+        [MaxLength(100)]
+        public string Identifier { get; set; } = string.Empty;
+    }
+
+    public class ResetPasswordWithCodeRequest
+    {
+        [Required]
+        [MaxLength(100)]
+        public string Identifier { get; set; } = string.Empty;
+
+        [Required]
+        [RegularExpression(@"^\d{6}$", ErrorMessage = "Code must be 6 digits.")]
+        public string Code { get; set; } = string.Empty;
+
+        [Required]
+        [StrongPassword(ErrorMessage = "Password must be 8-100 chars and include uppercase, lowercase, number, and special character.")]
+        [MaxLength(100)]
+        public string NewPassword { get; set; } = string.Empty;
+    }
+
+    public class VerifyResetCodeRequest
+    {
+        [Required]
+        [MaxLength(100)]
+        public string Identifier { get; set; } = string.Empty;
+
+        [Required]
+        [RegularExpression(@"^\d{6}$", ErrorMessage = "Code must be 6 digits.")]
+        public string Code { get; set; } = string.Empty;
     }
 
     public class LoginResponse

@@ -3,6 +3,7 @@ using System;
 using GymManagementBackend.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GymManagementBackend.Migrations
 {
     [DbContext(typeof(GymDbContext))]
-    partial class GymDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260415134722_Phase1FutureSchema")]
+    partial class Phase1FutureSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1171,73 +1174,6 @@ namespace GymManagementBackend.Migrations
                     b.ToTable("service_types");
                 });
 
-            modelBuilder.Entity("GymManagementBackend.Models.SubscriptionMonthService", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<decimal>("AmountPaid")
-                        .HasColumnType("numeric")
-                        .HasColumnName("amount_paid");
-
-                    b.Property<decimal>("AmountToPay")
-                        .HasColumnType("numeric")
-                        .HasColumnName("amount_to_pay");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("GymId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("gym_id");
-
-                    b.Property<Guid>("MemberSubscriptionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("member_subscription_id");
-
-                    b.Property<int>("MonthIndex")
-                        .HasColumnType("integer")
-                        .HasColumnName("month_index");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text")
-                        .HasColumnName("notes");
-
-                    b.Property<Guid>("ServiceTypeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("service_type_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("status");
-
-                    b.Property<Guid?>("TrainerUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("trainer_user_id");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ServiceTypeId");
-
-                    b.HasIndex("GymId", "MemberSubscriptionId", "MonthIndex");
-
-                    b.HasIndex("GymId", "ServiceTypeId", "MonthIndex");
-
-                    b.HasIndex("MemberSubscriptionId", "MonthIndex", "ServiceTypeId")
-                        .IsUnique();
-
-                    b.ToTable("subscription_month_services");
-                });
-
             modelBuilder.Entity("GymManagementBackend.Models.TrainerAssignment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1277,7 +1213,7 @@ namespace GymManagementBackend.Migrations
                         .HasColumnType("date")
                         .HasColumnName("to_date");
 
-                    b.Property<Guid?>("TrainerUserId")
+                    b.Property<Guid>("TrainerUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("trainer_user_id");
 
@@ -1522,21 +1458,6 @@ namespace GymManagementBackend.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("GymManagementBackend.Models.SubscriptionMonthService", b =>
-                {
-                    b.HasOne("GymManagementBackend.Models.MemberSubscription", null)
-                        .WithMany()
-                        .HasForeignKey("MemberSubscriptionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("GymManagementBackend.Models.ServiceType", null)
-                        .WithMany()
-                        .HasForeignKey("ServiceTypeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("GymManagementBackend.Models.TrainerAssignment", b =>
                 {
                     b.HasOne("GymManagementBackend.Models.Member", null)
@@ -1553,7 +1474,8 @@ namespace GymManagementBackend.Migrations
                     b.HasOne("GymManagementBackend.Models.User", null)
                         .WithMany()
                         .HasForeignKey("TrainerUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("GymManagementBackend.Models.User", b =>

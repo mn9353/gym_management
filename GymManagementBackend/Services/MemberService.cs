@@ -4,6 +4,7 @@ using GymManagementBackend.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
 
 namespace GymManagementBackend.Services
 {
@@ -39,6 +40,7 @@ namespace GymManagementBackend.Services
     {
         private readonly GymDbContext _context;
         private readonly ILogger<MemberService> _logger;
+        private readonly IEmailNotificationService _emailNotificationService;
         private static readonly Expression<Func<Member, MemberDto>> MemberToDtoProjection = m => new MemberDto
         {
             Id = m.Id,
@@ -53,6 +55,7 @@ namespace GymManagementBackend.Services
             PlanEndDate = m.PlanEndDate,
             LastPaymentDate = m.LastPaymentDate,
             MembershipType = m.MembershipType,
+            TrainingType = m.TrainingType,
             AmountPaid = m.AmountPaid,
             AmountToPay = m.AmountToPay,
             PaymentStatus = m.PaymentStatus,
@@ -61,6 +64,7 @@ namespace GymManagementBackend.Services
             EmergencyContact = m.EmergencyContact,
             Height = m.Height,
             Weight = m.Weight,
+            TargetWeight = m.TargetWeight,
             FitnessGoal = m.FitnessGoal,
             TrainerAssigned = m.TrainerAssigned,
             LeadSource = m.LeadSource,
@@ -69,10 +73,14 @@ namespace GymManagementBackend.Services
             UpdatedAt = m.UpdatedAt
         };
 
-        public MemberService(GymDbContext context, ILogger<MemberService> logger)
+        public MemberService(
+            GymDbContext context,
+            ILogger<MemberService> logger,
+            IEmailNotificationService emailNotificationService)
         {
             _context = context;
             _logger = logger;
+            _emailNotificationService = emailNotificationService;
         }
 
         public async Task<MemberDto> CreateMemberAsync(Guid gymId, CreateMemberDto createMemberDto)
@@ -90,6 +98,18 @@ namespace GymManagementBackend.Services
                 var planEndDate = ResolvePlanEndDate(createMemberDto.PlanStartDate, createMemberDto.PlanDurationMonths, createMemberDto.PlanEndDate);
                 ValidateMembershipDates(createMemberDto.PlanStartDate, planEndDate);
                 var membershipType = ResolveMembershipType(createMemberDto.PlanDurationMonths, createMemberDto.MembershipType);
+                var trainingType = NormalizeTrainingTypeValue(createMemberDto.TrainingType) ?? "GENERAL";
+                var trainerAssigned = string.IsNullOrWhiteSpace(createMemberDto.TrainerAssigned)
+                    ? null
+                    : createMemberDto.TrainerAssigned.Trim();
+                if (trainingType == "PERSONAL" && string.IsNullOrWhiteSpace(trainerAssigned))
+                {
+                    throw new InvalidOperationException("Trainer selection is required for PERSONAL training.");
+                }
+                if (trainingType != "PERSONAL")
+                {
+                    trainerAssigned = null;
+                }
                 var initialAmountPaid = decimal.Round(createMemberDto.AmountPaid ?? 0m, 2, MidpointRounding.AwayFromZero);
                 var initialPaymentMode = NormalizePaymentMode(createMemberDto.PaymentMode);
                 if (initialAmountPaid < 0m)
@@ -102,18 +122,25 @@ namespace GymManagementBackend.Services
                 }
                 var resolvedPaymentStatus = ResolvePaymentStatus(initialAmountPaid, createMemberDto.AmountToPay);
 
+                var normalizedEmail = createMemberDto.Email?.Trim().ToLowerInvariant();
+                var temporaryPassword = !string.IsNullOrWhiteSpace(normalizedEmail)
+                    ? GenerateTemporaryPassword()
+                    : null;
+
                 var member = new Member
                 {
                     GymId = gymId,
                     FullName = createMemberDto.FullName.Trim(),
                     Phone = createMemberDto.Phone?.Trim(),
-                    Email = createMemberDto.Email?.Trim().ToLowerInvariant(),
+                    Email = normalizedEmail,
+                    PasswordHash = temporaryPassword is null ? null : BCrypt.Net.BCrypt.HashPassword(temporaryPassword),
                     Gender = createMemberDto.Gender?.Trim(),
                     DateOfBirth = createMemberDto.DateOfBirth,
                     JoinDate = createMemberDto.JoinDate,
                     PlanStartDate = createMemberDto.PlanStartDate,
                     PlanEndDate = planEndDate,
                     MembershipType = membershipType,
+                    TrainingType = trainingType,
                     AmountPaid = initialAmountPaid,
                     AmountToPay = createMemberDto.AmountToPay,
                     PaymentStatus = resolvedPaymentStatus,
@@ -121,8 +148,9 @@ namespace GymManagementBackend.Services
                     EmergencyContact = createMemberDto.EmergencyContact?.Trim(),
                     Height = createMemberDto.Height,
                     Weight = createMemberDto.Weight,
+                    TargetWeight = createMemberDto.TargetWeight,
                     FitnessGoal = createMemberDto.FitnessGoal?.Trim(),
-                    TrainerAssigned = createMemberDto.TrainerAssigned?.Trim(),
+                    TrainerAssigned = trainerAssigned,
                     LeadSource = createMemberDto.LeadSource?.Trim(),
                     Notes = createMemberDto.Notes?.Trim(),
                     Status = ResolveStatusFromPlanEndDate(planEndDate)
@@ -132,9 +160,10 @@ namespace GymManagementBackend.Services
 
                 _context.Members.Add(member);
 
+                Payment? initialPayment = null;
                 if (initialAmountPaid > 0m)
                 {
-                    var initialPayment = new Payment
+                    initialPayment = new Payment
                     {
                         GymId = gymId,
                         MemberId = member.Id,
@@ -148,11 +177,45 @@ namespace GymManagementBackend.Services
                     _context.Payments.Add(initialPayment);
                 }
 
+                await CreateSubscriptionLedgerForCycleAsync(
+                    member,
+                    createMemberDto.PlanStartDate,
+                    planEndDate,
+                    createMemberDto.PlanDurationMonths ?? GetPlanDurationMonths(createMemberDto.PlanStartDate, planEndDate),
+                    createMemberDto.AmountToPay,
+                    initialAmountPaid,
+                    initialPayment,
+                    $"Initial {membershipType ?? "membership"}");
+
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
                 _logger.LogInformation($"Member created: {member.Id}");
-                return MapMemberToDto(member);
+
+                EmailDeliveryResult? emailResult = null;
+
+                if (!string.IsNullOrWhiteSpace(normalizedEmail) && !string.IsNullOrWhiteSpace(temporaryPassword))
+                {
+                    var gymName = await _context.Gyms
+                        .Where(g => g.Id == gymId)
+                        .Select(g => g.GymName)
+                        .FirstOrDefaultAsync() ?? "Gym";
+
+                    emailResult = await _emailNotificationService.SendMemberWelcomeEmailAsync(
+                        normalizedEmail,
+                        member.FullName,
+                        normalizedEmail,
+                        temporaryPassword,
+                        gymName);
+                }
+
+                var dto = MapMemberToDto(member);
+                if (emailResult is not null)
+                {
+                    dto.WelcomeEmailSent = emailResult.Success;
+                    dto.WelcomeEmailMessage = emailResult.Message;
+                }
+                return dto;
             }
             catch (Exception ex)
             {
@@ -206,8 +269,20 @@ namespace GymManagementBackend.Services
                     CreatedAt = GetDbTimestampNow()
                 };
 
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
                 _context.Payments.Add(payment);
+                await CreateSubscriptionLedgerForCycleAsync(
+                    member,
+                    renewMemberDto.PlanStartDate,
+                    planEndDate,
+                    renewMemberDto.PlanDurationMonths,
+                    member.AmountToPay,
+                    paymentAmount,
+                    paymentAmount > 0m ? payment : null,
+                    renewMemberDto.Remarks?.Trim() ?? "Renewal");
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
                 _logger.LogInformation("Member renewed: {MemberId}", memberId);
                 return MapMemberToDto(member);
@@ -229,7 +304,6 @@ namespace GymManagementBackend.Services
                 }
 
                 var member = await _context.Members
-                    .AsNoTracking()
                     .FirstOrDefaultAsync(m => m.Id == memberId && m.GymId == gymId);
 
                 if (member == null)
@@ -267,6 +341,7 @@ namespace GymManagementBackend.Services
                 member.UpdatedAt = GetDbTimestampNow();
 
                 _context.Payments.Add(payment);
+                await ApplyPaymentToCurrentLedgerAsync(member, paymentAmount, payment);
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
@@ -344,6 +419,7 @@ namespace GymManagementBackend.Services
                 payment.CreatedAt = EnsureUtc(payment.CreatedAt);
 
                 _context.Payments.Add(payment);
+                await ApplyPaymentToCurrentLedgerAsync(member, amountPaidNow, payment);
                 await _context.SaveChangesAsync();
 
                 await _context.Members
@@ -462,6 +538,18 @@ namespace GymManagementBackend.Services
                     _context.Payments.Add(payment);
                 }
 
+                var cycleStart = isExpand ? member.PlanEndDate.AddDays(1) : nextPlanStart;
+                var cycleEnd = nextPlanEnd;
+                await CreateSubscriptionLedgerForCycleAsync(
+                    member,
+                    cycleStart,
+                    cycleEnd,
+                    ownerRenewMemberDto.PlanDurationMonths,
+                    amountToPayIncrement,
+                    amountPaidNow,
+                    payment,
+                    ownerRenewMemberDto.Remarks?.Trim() ?? "Owner renewal");
+
                 await _context.SaveChangesAsync();
 
                 await _context.Database.ExecuteSqlInterpolatedAsync($@"
@@ -554,6 +642,20 @@ namespace GymManagementBackend.Services
                     member.MembershipType = normalizedMembershipType;
                 }
 
+                if (!string.IsNullOrWhiteSpace(updateMemberDto.TrainingType))
+                {
+                    var normalizedTrainingType = NormalizeTrainingTypeValue(updateMemberDto.TrainingType);
+                    if (normalizedTrainingType == null)
+                    {
+                        throw new InvalidOperationException("Training type must be GENERAL, PERSONAL, or HYBRID.");
+                    }
+                    member.TrainingType = normalizedTrainingType;
+                    if (normalizedTrainingType != "PERSONAL")
+                    {
+                        member.TrainerAssigned = null;
+                    }
+                }
+
                 if (updateMemberDto.AmountPaid.HasValue)
                     member.AmountPaid = updateMemberDto.AmountPaid;
 
@@ -577,11 +679,20 @@ namespace GymManagementBackend.Services
                 if (updateMemberDto.Weight.HasValue)
                     member.Weight = updateMemberDto.Weight;
 
+                if (updateMemberDto.TargetWeight.HasValue)
+                    member.TargetWeight = updateMemberDto.TargetWeight;
+
                 if (!string.IsNullOrEmpty(updateMemberDto.FitnessGoal))
                     member.FitnessGoal = updateMemberDto.FitnessGoal;
 
                 if (!string.IsNullOrEmpty(updateMemberDto.TrainerAssigned))
-                    member.TrainerAssigned = updateMemberDto.TrainerAssigned;
+                {
+                    var nextTrainer = updateMemberDto.TrainerAssigned.Trim();
+                    if (string.Equals(member.TrainingType, "PERSONAL", StringComparison.OrdinalIgnoreCase))
+                    {
+                        member.TrainerAssigned = nextTrainer;
+                    }
+                }
 
                 if (!string.IsNullOrEmpty(updateMemberDto.Notes))
                     member.Notes = updateMemberDto.Notes;
@@ -725,6 +836,7 @@ namespace GymManagementBackend.Services
                 PlanEndDate = member.PlanEndDate,
                 LastPaymentDate = member.LastPaymentDate,
                 MembershipType = member.MembershipType,
+                TrainingType = member.TrainingType,
                 AmountPaid = member.AmountPaid,
                 AmountToPay = member.AmountToPay,
                 PaymentStatus = member.PaymentStatus,
@@ -733,6 +845,7 @@ namespace GymManagementBackend.Services
                 EmergencyContact = member.EmergencyContact,
                 Height = member.Height,
                 Weight = member.Weight,
+                TargetWeight = member.TargetWeight,
                 FitnessGoal = member.FitnessGoal,
                 TrainerAssigned = member.TrainerAssigned,
                 LeadSource = member.LeadSource,
@@ -774,6 +887,7 @@ namespace GymManagementBackend.Services
                         Status = m.Status,
                         PaymentStatus = m.PaymentStatus,
                         MembershipType = m.MembershipType,
+                        TrainingType = m.TrainingType,
                         TrainerAssigned = m.TrainerAssigned,
                         AmountPaid = normalized.IncludeAmount ? m.AmountPaid : null,
                         AmountToPay = normalized.IncludeAmount ? m.AmountToPay : null
@@ -905,6 +1019,7 @@ namespace GymManagementBackend.Services
                         Status = m.Status,
                         PaymentStatus = m.PaymentStatus,
                         MembershipType = m.MembershipType,
+                        TrainingType = m.TrainingType,
                         TrainerAssigned = m.TrainerAssigned,
                         AmountPaid = request.IncludeAmount ? m.AmountPaid : null,
                         AmountToPay = request.IncludeAmount ? m.AmountToPay : null
@@ -1035,6 +1150,16 @@ namespace GymManagementBackend.Services
                     return query.Where(_ => false);
                 }
                 query = query.Where(m => m.MembershipType != null && m.MembershipType == membershipType);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filters.TrainingType))
+            {
+                var trainingType = NormalizeTrainingTypeValue(filters.TrainingType);
+                if (trainingType == null)
+                {
+                    return query.Where(_ => false);
+                }
+                query = query.Where(m => m.TrainingType == trainingType);
             }
 
             if (!string.IsNullOrWhiteSpace(filters.TrainerAssigned))
@@ -1412,6 +1537,23 @@ namespace GymManagementBackend.Services
             };
         }
 
+        private static string? NormalizeTrainingTypeValue(string? trainingType)
+        {
+            if (string.IsNullOrWhiteSpace(trainingType))
+            {
+                return null;
+            }
+
+            var normalized = trainingType.Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+            return normalized switch
+            {
+                "GENERAL" => "GENERAL",
+                "PERSONAL" => "PERSONAL",
+                "HYBRID" => "HYBRID",
+                _ => null
+            };
+        }
+
         private static string? NormalizePaymentMode(string? paymentMode)
         {
             if (string.IsNullOrWhiteSpace(paymentMode))
@@ -1441,6 +1583,217 @@ namespace GymManagementBackend.Services
             }
 
             return amountPaid < amountToPay.Value ? "PARTIAL" : "PAID";
+        }
+
+        private async Task CreateSubscriptionLedgerForCycleAsync(
+            Member member,
+            DateOnly planStartDate,
+            DateOnly planEndDate,
+            int planDurationMonths,
+            decimal? amountToPay,
+            decimal amountPaid,
+            Payment? payment,
+            string remarks)
+        {
+            var (serviceTypeId, servicePlanId) = await EnsureServicePlanForMemberAsync(
+                member.GymId,
+                member.TrainingType,
+                member.MembershipType,
+                planDurationMonths,
+                amountToPay ?? 0m);
+
+            var resolvedAmountToPay = decimal.Round(amountToPay ?? 0m, 2, MidpointRounding.AwayFromZero);
+            var resolvedAmountPaid = decimal.Round(amountPaid, 2, MidpointRounding.AwayFromZero);
+            var status = ResolvePaymentStatus(resolvedAmountPaid, resolvedAmountToPay);
+
+            var subscription = new MemberSubscription
+            {
+                GymId = member.GymId,
+                MemberId = member.Id,
+                ServicePlanId = servicePlanId,
+                StartDate = planStartDate,
+                EndDate = planEndDate,
+                Status = ResolveStatusFromPlanEndDate(planEndDate),
+                AmountToPay = resolvedAmountToPay,
+                AmountPaid = resolvedAmountPaid,
+                CreatedAt = GetDbTimestampNow(),
+                UpdatedAt = GetDbTimestampNow()
+            };
+            _context.MemberSubscriptions.Add(subscription);
+
+            var invoice = new Invoice
+            {
+                GymId = member.GymId,
+                MemberId = member.Id,
+                InvoiceNumber = await GenerateInvoiceNumberAsync(member.GymId),
+                InvoiceDate = planStartDate,
+                DueDate = planStartDate,
+                Status = status == "PAID" ? "PAID" : "ISSUED",
+                TotalAmount = resolvedAmountToPay,
+                PaidAmount = resolvedAmountPaid,
+                BalanceAmount = Math.Max(0m, resolvedAmountToPay - resolvedAmountPaid),
+                Notes = remarks,
+                CreatedAt = GetDbTimestampNow(),
+                UpdatedAt = GetDbTimestampNow()
+            };
+            _context.Invoices.Add(invoice);
+
+            var lineItem = new InvoiceLineItem
+            {
+                GymId = member.GymId,
+                InvoiceId = invoice.Id,
+                ServiceTypeId = serviceTypeId,
+                ServicePlanId = servicePlanId,
+                Description = $"{member.TrainingType} - {member.MembershipType ?? $"{planDurationMonths} month"}",
+                Quantity = 1,
+                UnitPrice = resolvedAmountToPay,
+                LineTotal = resolvedAmountToPay,
+                CoverageStart = planStartDate,
+                CoverageEnd = planEndDate,
+                CreatedAt = GetDbTimestampNow()
+            };
+            _context.InvoiceLineItems.Add(lineItem);
+
+            if (payment is not null && resolvedAmountPaid > 0m)
+            {
+                var allocation = new PaymentAllocation
+                {
+                    GymId = member.GymId,
+                    PaymentId = payment.Id,
+                    InvoiceId = invoice.Id,
+                    InvoiceLineItemId = lineItem.Id,
+                    Amount = resolvedAmountPaid,
+                    CreatedAt = GetDbTimestampNow()
+                };
+                _context.PaymentAllocations.Add(allocation);
+            }
+        }
+
+        private async Task<(Guid ServiceTypeId, Guid ServicePlanId)> EnsureServicePlanForMemberAsync(
+            Guid gymId,
+            string? trainingType,
+            string? membershipType,
+            int durationMonths,
+            decimal price)
+        {
+            var normalizedTraining = NormalizeTrainingTypeValue(trainingType) ?? "GENERAL";
+            var serviceCode = normalizedTraining == "PERSONAL" ? "PERSONAL_TRAINING" : "GENERAL_MEMBERSHIP";
+            var serviceDisplay = normalizedTraining == "PERSONAL" ? "Personal Training" : "General Membership";
+
+            var serviceType = await _context.ServiceTypes
+                .FirstOrDefaultAsync(x => x.GymId == gymId && x.Code == serviceCode);
+            if (serviceType is null)
+            {
+                serviceType = new ServiceType
+                {
+                    GymId = gymId,
+                    Code = serviceCode,
+                    DisplayName = serviceDisplay,
+                    IsActive = true,
+                    SortOrder = 1,
+                    CreatedAt = GetDbTimestampNow(),
+                    UpdatedAt = GetDbTimestampNow()
+                };
+                _context.ServiceTypes.Add(serviceType);
+            }
+
+            var membershipLabel = string.IsNullOrWhiteSpace(membershipType)
+                ? $"{durationMonths} Month"
+                : membershipType.Replace("_", " ", StringComparison.OrdinalIgnoreCase);
+            var planName = $"{membershipLabel} {serviceDisplay}".Trim();
+
+            var servicePlan = await _context.ServicePlans
+                .FirstOrDefaultAsync(x =>
+                    x.GymId == gymId
+                    && x.ServiceTypeId == serviceType.Id
+                    && x.DurationMonths == durationMonths
+                    && x.Name == planName);
+
+            if (servicePlan is null)
+            {
+                servicePlan = new ServicePlan
+                {
+                    GymId = gymId,
+                    ServiceTypeId = serviceType.Id,
+                    Name = planName,
+                    DurationMonths = durationMonths,
+                    Price = decimal.Round(price, 2, MidpointRounding.AwayFromZero),
+                    IsActive = true,
+                    CreatedAt = GetDbTimestampNow(),
+                    UpdatedAt = GetDbTimestampNow()
+                };
+                _context.ServicePlans.Add(servicePlan);
+            }
+
+            return (serviceType.Id, servicePlan.Id);
+        }
+
+        private async Task<string> GenerateInvoiceNumberAsync(Guid gymId)
+        {
+            var datePart = DateTime.UtcNow.ToString("yyyyMMdd");
+            var prefix = $"INV-{datePart}";
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var count = await _context.Invoices.CountAsync(x => x.GymId == gymId && x.InvoiceDate == today);
+            return $"{prefix}-{(count + 1):D4}";
+        }
+
+        private async Task ApplyPaymentToCurrentLedgerAsync(Member member, decimal paymentAmount, Payment payment)
+        {
+            if (paymentAmount <= 0m)
+            {
+                return;
+            }
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var subscription = await _context.MemberSubscriptions
+                .Where(x => x.MemberId == member.Id)
+                .OrderByDescending(x => x.EndDate)
+                .ThenByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (subscription is not null)
+            {
+                subscription.AmountPaid = decimal.Round((subscription.AmountPaid + paymentAmount), 2, MidpointRounding.AwayFromZero);
+                subscription.Status = subscription.EndDate < today ? "EXPIRED" : "ACTIVE";
+                subscription.UpdatedAt = GetDbTimestampNow();
+            }
+
+            var invoice = await _context.Invoices
+                .Where(x => x.MemberId == member.Id)
+                .OrderByDescending(x => x.InvoiceDate)
+                .ThenByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (invoice is null)
+            {
+                return;
+            }
+
+            var allocationAmount = Math.Min(paymentAmount, Math.Max(0m, invoice.BalanceAmount));
+            if (allocationAmount <= 0m)
+            {
+                return;
+            }
+
+            invoice.PaidAmount = decimal.Round(invoice.PaidAmount + allocationAmount, 2, MidpointRounding.AwayFromZero);
+            invoice.BalanceAmount = decimal.Round(Math.Max(0m, invoice.TotalAmount - invoice.PaidAmount), 2, MidpointRounding.AwayFromZero);
+            invoice.Status = invoice.BalanceAmount <= 0m ? "PAID" : "ISSUED";
+            invoice.UpdatedAt = GetDbTimestampNow();
+
+            var lineItemId = await _context.InvoiceLineItems
+                .Where(x => x.InvoiceId == invoice.Id)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync();
+
+            _context.PaymentAllocations.Add(new PaymentAllocation
+            {
+                GymId = member.GymId,
+                PaymentId = payment.Id,
+                InvoiceId = invoice.Id,
+                InvoiceLineItemId = lineItemId,
+                Amount = allocationAmount,
+                CreatedAt = GetDbTimestampNow()
+            });
         }
 
         private async Task<Member?> FindDuplicateMemberAsync(Guid gymId, string? phone, string? email)
@@ -1473,7 +1826,8 @@ namespace GymManagementBackend.Services
                 PlanStartDate = member.PlanStartDate,
                 PlanEndDate = member.PlanEndDate,
                 Status = member.Status,
-                MembershipType = member.MembershipType
+                MembershipType = member.MembershipType,
+                TrainingType = member.TrainingType
             };
         }
 
@@ -1491,6 +1845,34 @@ namespace GymManagementBackend.Services
         private static string NormalizeEmail(string? email)
         {
             return string.IsNullOrWhiteSpace(email) ? string.Empty : email.Trim().ToLowerInvariant();
+        }
+
+        private static string GenerateTemporaryPassword()
+        {
+            const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+            const string lower = "abcdefghijkmnpqrstuvwxyz";
+            const string digits = "23456789";
+            const string special = "@#$%&*!";
+            var all = upper + lower + digits + special;
+
+            Span<char> password = stackalloc char[10];
+            password[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+            password[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+            password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+            password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+
+            for (var i = 4; i < password.Length; i++)
+            {
+                password[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
+            }
+
+            for (var i = password.Length - 1; i > 0; i--)
+            {
+                var j = RandomNumberGenerator.GetInt32(i + 1);
+                (password[i], password[j]) = (password[j], password[i]);
+            }
+
+            return new string(password);
         }
 
         private static DateTime GetDbTimestampNow()

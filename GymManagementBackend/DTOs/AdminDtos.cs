@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GymManagementBackend.Validation;
 
 namespace GymManagementBackend.DTOs
 {
@@ -15,8 +16,22 @@ namespace GymManagementBackend.DTOs
         public string SubscriptionPlan { get; set; } = "basic";
         public bool IsActive { get; set; }
         public int UsersCount { get; set; }
+        public int ActiveUsersCount { get; set; }
+        public int InactiveUsersCount { get; set; }
         public int MembersCount { get; set; }
+        public decimal RevenueThisMonth { get; set; }
+        public decimal RevenueLastMonth { get; set; }
+        public decimal RevenueTotal { get; set; }
+        public bool? NotificationEmailSent { get; set; }
+        public string? NotificationEmailMessage { get; set; }
         public DateTime CreatedAt { get; set; }
+    }
+
+    public class GymMonthlyRevenuePointDto
+    {
+        public int Year { get; set; }
+        public int Month { get; set; }
+        public decimal Amount { get; set; }
     }
 
     public class CreateGymDto
@@ -30,9 +45,10 @@ namespace GymManagementBackend.DTOs
         public string OwnerName { get; set; } = string.Empty;
 
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
-        [EmailAddress]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         [StringLength(100)]
         public string? Email { get; set; }
 
@@ -48,6 +64,40 @@ namespace GymManagementBackend.DTOs
         public string SubscriptionPlan { get; set; } = "basic";
     }
 
+    public class CreateGymWithOwnersDto
+    {
+        [Required]
+        public CreateGymDto Gym { get; set; } = new();
+
+        [Required]
+        [MinLength(1)]
+        [MaxLength(2)]
+        public List<CreateGymOwnerDto> Owners { get; set; } = new();
+    }
+
+    public class CreateGymOwnerDto
+    {
+        [Required]
+        [StringLength(100)]
+        public string FullName { get; set; } = string.Empty;
+
+        [Required]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
+        [StringLength(100)]
+        public string Email { get; set; } = string.Empty;
+
+        [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
+        public string? Phone { get; set; }
+
+    }
+
+    public class GymWithOwnersDto
+    {
+        public GymDto Gym { get; set; } = new();
+        public List<AppUserDto> Owners { get; set; } = new();
+    }
+
     public class UpdateGymDto
     {
         [StringLength(150)]
@@ -57,9 +107,10 @@ namespace GymManagementBackend.DTOs
         public string? OwnerName { get; set; }
 
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
-        [EmailAddress]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         [StringLength(100)]
         public string? Email { get; set; }
 
@@ -86,6 +137,8 @@ namespace GymManagementBackend.DTOs
         public string? Phone { get; set; }
         public string Role { get; set; } = string.Empty;
         public bool IsActive { get; set; }
+        public bool? WelcomeEmailSent { get; set; }
+        public string? WelcomeEmailMessage { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 
@@ -99,20 +152,16 @@ namespace GymManagementBackend.DTOs
         public string FullName { get; set; } = string.Empty;
 
         [Required]
-        [EmailAddress]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         [StringLength(100)]
         public string Email { get; set; } = string.Empty;
 
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
         [Required]
-        [MinLength(6)]
-        [MaxLength(100)]
-        public string Password { get; set; } = string.Empty;
-
-        [Required]
-        [RegularExpression("^(ADMIN|OWNER|STAFF)$")]
+        [RegularExpression("^(ADMIN|OWNER|STAFF|TRAINER|MEMBER)$")]
         public string Role { get; set; } = "OWNER";
     }
 
@@ -123,20 +172,16 @@ namespace GymManagementBackend.DTOs
         public string FullName { get; set; } = string.Empty;
 
         [Required]
-        [EmailAddress]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         [StringLength(100)]
         public string Email { get; set; } = string.Empty;
 
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
         [Required]
-        [MinLength(6)]
-        [MaxLength(100)]
-        public string Password { get; set; } = string.Empty;
-
-        [Required]
-        [RegularExpression("^(STAFF)$")]
+        [RegularExpression("^(STAFF|TRAINER)$")]
         public string Role { get; set; } = "STAFF";
     }
 
@@ -145,10 +190,15 @@ namespace GymManagementBackend.DTOs
         [StringLength(100)]
         public string? FullName { get; set; }
 
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
+        [StringLength(100)]
+        public string? Email { get; set; }
+
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
-        [RegularExpression("^(ADMIN|OWNER|STAFF)$")]
+        [RegularExpression("^(ADMIN|OWNER|STAFF|TRAINER|MEMBER)$")]
         public string? Role { get; set; }
 
         public bool? IsActive { get; set; }

@@ -9,9 +9,10 @@ using Npgsql;
 
 namespace GymManagementBackend.Controllers
 {
+    
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "OwnerOrAdmin")]
+    [Authorize(Policy = "TrainerOrAbove")]
     public class MembersController : ControllerBase
     {
         private readonly IMemberService _memberService;

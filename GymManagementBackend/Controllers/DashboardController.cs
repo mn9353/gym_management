@@ -9,7 +9,7 @@ namespace GymManagementBackend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "OwnerOrAdmin")]
+    [Authorize(Policy = "TrainerOrAbove")]
     public class DashboardController : ControllerBase
     {
         private readonly IDashboardService _dashboardService;
@@ -121,6 +121,7 @@ namespace GymManagementBackend.Controllers
         }
 
         [HttpGet("revenue-trends")]
+        [Authorize(Policy = "OwnerOrAdmin")]
         public async Task<IActionResult> GetRevenueTrends([FromQuery] int months = 6, [FromQuery] Guid? gymId = null)
         {
             try

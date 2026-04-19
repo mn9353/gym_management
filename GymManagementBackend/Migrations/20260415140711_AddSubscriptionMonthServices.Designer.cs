@@ -3,6 +3,7 @@ using System;
 using GymManagementBackend.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GymManagementBackend.Migrations
 {
     [DbContext(typeof(GymDbContext))]
-    partial class GymDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260415140711_AddSubscriptionMonthServices")]
+    partial class AddSubscriptionMonthServices
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1277,7 +1280,7 @@ namespace GymManagementBackend.Migrations
                         .HasColumnType("date")
                         .HasColumnName("to_date");
 
-                    b.Property<Guid?>("TrainerUserId")
+                    b.Property<Guid>("TrainerUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("trainer_user_id");
 
@@ -1553,7 +1556,8 @@ namespace GymManagementBackend.Migrations
                     b.HasOne("GymManagementBackend.Models.User", null)
                         .WithMany()
                         .HasForeignKey("TrainerUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("GymManagementBackend.Models.User", b =>

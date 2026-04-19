@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using GymManagementBackend.DTOs;
 using GymManagementBackend.Services;
 using GymManagementBackend.Extensions;
+using System.Security.Claims;
 
 namespace GymManagementBackend.Controllers
 {
@@ -30,6 +31,30 @@ namespace GymManagementBackend.Controllers
             }
 
             return Ok(response);
+        }
+
+        [HttpPost("forgot-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+        {
+            var (success, message) = await _authService.SendPasswordResetCodeAsync(request);
+            return success ? Ok(new { success, message }) : BadRequest(new { success, message });
+        }
+
+        [HttpPost("verify-reset-code")]
+        [AllowAnonymous]
+        public async Task<IActionResult> VerifyResetCode([FromBody] VerifyResetCodeRequest request)
+        {
+            var (success, message) = await _authService.VerifyPasswordResetCodeAsync(request);
+            return success ? Ok(new { success, message }) : BadRequest(new { success, message });
+        }
+
+        [HttpPost("reset-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithCodeRequest request)
+        {
+            var (success, message) = await _authService.ResetPasswordWithCodeAsync(request);
+            return success ? Ok(new { success, message }) : BadRequest(new { success, message });
         }
 
         [HttpPost("refresh-token")]
@@ -74,6 +99,31 @@ namespace GymManagementBackend.Controllers
         public IActionResult VerifyToken()
         {
             return Ok(new { message = "Token is valid" });
+        }
+
+        [HttpGet("debug-auth")]
+        [Authorize]
+        public IActionResult DebugAuthContext()
+        {
+            var claims = User.Claims
+                .Select(c => new { type = c.Type, value = c.Value })
+                .ToList();
+
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var roleClaim = User.FindFirstValue(ClaimTypes.Role) ?? User.FindFirstValue("role");
+            var gymIdClaim = User.FindFirstValue("gym_id");
+
+            return Ok(new
+            {
+                isAuthenticated = User.Identity?.IsAuthenticated ?? false,
+                resolved = new
+                {
+                    userId = userIdClaim,
+                    role = roleClaim,
+                    gymId = gymIdClaim
+                },
+                claims
+            });
         }
 
         private string? GetIpAddress()

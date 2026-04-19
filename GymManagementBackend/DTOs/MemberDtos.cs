@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using GymManagementBackend.Validation;
 
 namespace GymManagementBackend.DTOs
 {
@@ -11,10 +12,11 @@ namespace GymManagementBackend.DTOs
 
         [Required]
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string Phone { get; set; } = string.Empty;
 
         [StringLength(100)]
-        [EmailAddress]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         public string? Email { get; set; }
 
         [StringLength(20)]
@@ -36,6 +38,9 @@ namespace GymManagementBackend.DTOs
         [StringLength(50)]
         public string? MembershipType { get; set; }
 
+        [StringLength(20)]
+        public string? TrainingType { get; set; } = "GENERAL";
+
         public decimal? AmountPaid { get; set; }
         public decimal? AmountToPay { get; set; }
 
@@ -50,6 +55,7 @@ namespace GymManagementBackend.DTOs
 
         public decimal? Height { get; set; }
         public decimal? Weight { get; set; }
+        public decimal? TargetWeight { get; set; }
 
         [StringLength(255)]
         public string? FitnessGoal { get; set; }
@@ -174,10 +180,11 @@ namespace GymManagementBackend.DTOs
         public string? FullName { get; set; }
 
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
         [StringLength(100)]
-        [EmailAddress]
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
         public string? Email { get; set; }
 
         [StringLength(20)]
@@ -190,6 +197,9 @@ namespace GymManagementBackend.DTOs
         [StringLength(50)]
         public string? MembershipType { get; set; }
 
+        [StringLength(20)]
+        public string? TrainingType { get; set; }
+
         public decimal? AmountPaid { get; set; }
         public decimal? AmountToPay { get; set; }
 
@@ -200,10 +210,12 @@ namespace GymManagementBackend.DTOs
         public string? Status { get; set; }
 
         [StringLength(15)]
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? EmergencyContact { get; set; }
 
         public decimal? Height { get; set; }
         public decimal? Weight { get; set; }
+        public decimal? TargetWeight { get; set; }
 
         [StringLength(255)]
         public string? FitnessGoal { get; set; }
@@ -228,6 +240,7 @@ namespace GymManagementBackend.DTOs
         public DateOnly PlanEndDate { get; set; }
         public DateOnly? LastPaymentDate { get; set; }
         public string? MembershipType { get; set; }
+        public string TrainingType { get; set; } = "GENERAL";
         public decimal? AmountPaid { get; set; }
         public decimal? AmountToPay { get; set; }
         public string PaymentStatus { get; set; } = string.Empty;
@@ -236,10 +249,13 @@ namespace GymManagementBackend.DTOs
         public string? EmergencyContact { get; set; }
         public decimal? Height { get; set; }
         public decimal? Weight { get; set; }
+        public decimal? TargetWeight { get; set; }
         public string? FitnessGoal { get; set; }
         public string? TrainerAssigned { get; set; }
         public string? LeadSource { get; set; }
         public string? ProfileImageUrl { get; set; }
+        public bool? WelcomeEmailSent { get; set; }
+        public string? WelcomeEmailMessage { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -269,6 +285,7 @@ namespace GymManagementBackend.DTOs
         public string? Gender { get; set; }
         public string? PaymentStatus { get; set; }
         public string? MembershipType { get; set; }
+        public string? TrainingType { get; set; }
         public string? TrainerAssigned { get; set; }
         public string? LeadSource { get; set; }
 
@@ -300,6 +317,7 @@ namespace GymManagementBackend.DTOs
         public string Status { get; set; } = string.Empty;
         public string PaymentStatus { get; set; } = string.Empty;
         public string? MembershipType { get; set; }
+        public string TrainingType { get; set; } = "GENERAL";
         public string? TrainerAssigned { get; set; }
         public decimal? AmountPaid { get; set; }
         public decimal? AmountToPay { get; set; }
@@ -332,6 +350,7 @@ namespace GymManagementBackend.DTOs
         public DateOnly PlanEndDate { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? MembershipType { get; set; }
+        public string TrainingType { get; set; } = "GENERAL";
     }
 
     public class MemberGridRequestDto

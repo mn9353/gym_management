@@ -27,6 +27,9 @@ namespace GymManagementBackend.Models
         [StringLength(100)]
         public string? Email { get; set; }
 
+        [Column("password_hash")]
+        public string? PasswordHash { get; set; }
+
         [Column("gender")]
         [StringLength(20)]
         public string? Gender { get; set; }
@@ -52,6 +55,10 @@ namespace GymManagementBackend.Models
         [Column("membership_type")]
         [StringLength(50)]
         public string? MembershipType { get; set; }
+
+        [Column("training_type")]
+        [StringLength(20)]
+        public string TrainingType { get; set; } = "GENERAL"; // GENERAL, PERSONAL, HYBRID
 
         [Column("amount_paid")]
         public decimal? AmountPaid { get; set; }
@@ -79,6 +86,9 @@ namespace GymManagementBackend.Models
 
         [Column("weight")]
         public decimal? Weight { get; set; }
+
+        [Column("target_weight")]
+        public decimal? TargetWeight { get; set; }
 
         [Column("fitness_goal")]
         [StringLength(255)]
