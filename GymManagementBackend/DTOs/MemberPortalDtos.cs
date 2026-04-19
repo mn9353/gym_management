@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GymManagementBackend.Validation;
 
 namespace GymManagementBackend.DTOs
 {
@@ -12,9 +13,13 @@ namespace GymManagementBackend.DTOs
         public string FullName { get; set; } = string.Empty;
         public string? Email { get; set; }
         public string? Phone { get; set; }
+        public string? Gender { get; set; }
+        public DateOnly? DateOfBirth { get; set; }
         public decimal? Height { get; set; }
         public decimal? Weight { get; set; }
         public decimal? TargetWeight { get; set; }
+        public string? EmergencyContact { get; set; }
+        public string? FitnessGoal { get; set; }
         public DateOnly? LastWeightUpdateDate { get; set; }
         public DateOnly JoinDate { get; set; }
         public DateOnly PlanEndDate { get; set; }
@@ -23,6 +28,7 @@ namespace GymManagementBackend.DTOs
         public int AttendanceThisMonth { get; set; }
         public int AttendanceLast30Days { get; set; }
         public int MissedDaysLast30Days { get; set; }
+        public int RestDaysLast30Days { get; set; }
         public int CurrentStreakDays { get; set; }
         public int BestStreakDays { get; set; }
     }
@@ -110,5 +116,48 @@ namespace GymManagementBackend.DTOs
         public DateTime CheckinAt { get; set; }
         public bool AlreadyCheckedIn { get; set; }
         public bool WorkoutLogged { get; set; }
+    }
+
+    public class MemberRestDayRequestDto
+    {
+        [Required]
+        public DateOnly RestDate { get; set; }
+
+        [StringLength(300)]
+        public string? Notes { get; set; }
+    }
+
+    public class MemberRestDayDto
+    {
+        public Guid Id { get; set; }
+        public DateOnly RestDate { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public class MemberProfileUpdateRequestDto
+    {
+        [Required]
+        [StringLength(100)]
+        public string FullName { get; set; } = string.Empty;
+
+        [StrictEmail(ErrorMessage = "Please enter a valid email address.")]
+        [StringLength(100)]
+        public string? Email { get; set; }
+
+        [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
+        [StringLength(20)]
+        public string? Phone { get; set; }
+
+        [StringLength(20)]
+        public string? Gender { get; set; }
+
+        public DateOnly? DateOfBirth { get; set; }
+
+        [IndianPhone(ErrorMessage = "Emergency phone must be in +91XXXXXXXXXX format.")]
+        [StringLength(20)]
+        public string? EmergencyContact { get; set; }
+
+        [StringLength(255)]
+        public string? FitnessGoal { get; set; }
     }
 }

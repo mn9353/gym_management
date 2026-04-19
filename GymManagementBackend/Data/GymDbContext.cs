@@ -26,9 +26,11 @@ namespace GymManagementBackend.Data
         public DbSet<AttendancePolicy> AttendancePolicies { get; set; }
         public DbSet<MemberBodyMetric> MemberBodyMetrics { get; set; }
         public DbSet<MemberWorkoutLog> MemberWorkoutLogs { get; set; }
+        public DbSet<MemberRestDay> MemberRestDays { get; set; }
         public DbSet<LoginEvent> LoginEvents { get; set; }
         public DbSet<NotificationOutbox> NotificationOutboxes { get; set; }
         public DbSet<EmailTemplate> EmailTemplates { get; set; }
+        public DbSet<PasswordResetCode> PasswordResetCodes { get; set; }
         public DbSet<Enquiry> Enquiries { get; set; }
         public DbSet<EnquiryFollowup> EnquiryFollowups { get; set; }
         public DbSet<EnquiryStageHistory> EnquiryStageHistories { get; set; }
@@ -284,6 +286,10 @@ namespace GymManagementBackend.Data
                 .IsUnique()
                 .HasFilter("\"checkin_id\" IS NOT NULL");
 
+            modelBuilder.Entity<MemberRestDay>()
+                .HasIndex(x => new { x.GymId, x.MemberId, x.RestDate })
+                .IsUnique();
+
             modelBuilder.Entity<AttendancePolicy>()
                 .HasIndex(x => new { x.GymId, x.IsActive });
 
@@ -304,6 +310,9 @@ namespace GymManagementBackend.Data
                 .HasIndex(x => x.IdempotencyKey)
                 .IsUnique()
                 .HasFilter("\"idempotency_key\" IS NOT NULL");
+
+            modelBuilder.Entity<PasswordResetCode>()
+                .HasIndex(x => new { x.Email, x.ExpiresAt });
 
             modelBuilder.Entity<EmailTemplate>()
                 .HasIndex(x => x.TemplateKey)

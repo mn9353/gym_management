@@ -14,6 +14,9 @@ namespace GymManagementBackend.Services
         Task<MemberAttendanceSummaryDto> GetAttendanceAsync(ClaimsPrincipal user, int months, int limit);
         Task<IReadOnlyList<MemberMissedTrendPointDto>> GetMissedDaysTrendAsync(ClaimsPrincipal user, int weeks);
         Task<IReadOnlyList<MemberMuscleDistributionDto>> GetMonthlyMuscleDistributionAsync(ClaimsPrincipal user, int months);
+        Task<MemberPortalSummaryDto> UpdateProfileAsync(ClaimsPrincipal user, MemberProfileUpdateRequestDto request);
+        Task<MemberRestDayDto> AddRestDayAsync(ClaimsPrincipal user, MemberRestDayRequestDto request);
+        Task<IReadOnlyList<MemberRestDayDto>> GetRestDaysAsync(ClaimsPrincipal user, int months);
         Task<MemberCheckinResultDto> CheckinByQrAsync(ClaimsPrincipal user, MemberCheckinScanRequestDto request);
         Task<MemberCheckinResultDto> AddWorkoutForCheckinAsync(ClaimsPrincipal user, Guid checkinId, MemberWorkoutLogRequestDto request);
     }
@@ -47,6 +50,9 @@ namespace GymManagementBackend.Services
             var attendanceLast30Days = await _context.MemberCheckins
                 .AsNoTracking()
                 .CountAsync(x => x.MemberId == member.Id && x.CheckinDate >= thirtyDaysAgo && x.CheckinDate <= today);
+            var restDaysLast30Days = await _context.MemberRestDays
+                .AsNoTracking()
+                .CountAsync(x => x.MemberId == member.Id && x.RestDate >= thirtyDaysAgo && x.RestDate <= today);
 
             var latestWeightMetricDate = await _context.MemberBodyMetrics
                 .AsNoTracking()
@@ -62,11 +68,18 @@ namespace GymManagementBackend.Services
                 .Distinct()
                 .OrderBy(x => x)
                 .ToListAsync();
+            var restDates = await _context.MemberRestDays
+                .AsNoTracking()
+                .Where(x => x.MemberId == member.Id)
+                .Select(x => x.RestDate)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToListAsync();
 
-            var currentStreak = ComputeCurrentStreak(checkinDates, today);
-            var bestStreak = ComputeBestStreak(checkinDates);
+            var currentStreak = ComputeCurrentStreak(checkinDates, restDates, today);
+            var bestStreak = ComputeBestStreak(checkinDates, restDates);
             var totalDays = (today.DayNumber - thirtyDaysAgo.DayNumber) + 1;
-            var missedLast30 = Math.Max(0, totalDays - attendanceLast30Days);
+            var missedLast30 = Math.Max(0, totalDays - attendanceLast30Days - restDaysLast30Days);
 
             return new MemberPortalSummaryDto
             {
@@ -78,9 +91,13 @@ namespace GymManagementBackend.Services
                 FullName = member.FullName,
                 Email = member.Email,
                 Phone = member.Phone,
+                Gender = member.Gender,
+                DateOfBirth = member.DateOfBirth,
                 Height = member.Height,
                 Weight = member.Weight,
                 TargetWeight = member.TargetWeight,
+                EmergencyContact = member.EmergencyContact,
+                FitnessGoal = member.FitnessGoal,
                 LastWeightUpdateDate = latestWeightMetricDate,
                 JoinDate = member.JoinDate,
                 PlanEndDate = member.PlanEndDate,
@@ -88,6 +105,7 @@ namespace GymManagementBackend.Services
                 CheckedInToday = checkedInToday,
                 AttendanceThisMonth = attendanceThisMonth,
                 AttendanceLast30Days = attendanceLast30Days,
+                RestDaysLast30Days = restDaysLast30Days,
                 MissedDaysLast30Days = missedLast30,
                 CurrentStreakDays = currentStreak,
                 BestStreakDays = bestStreak
@@ -216,19 +234,31 @@ namespace GymManagementBackend.Services
                 .Select(x => x.CheckinDate)
                 .Distinct()
                 .ToListAsync();
+            var restDates = await _context.MemberRestDays
+                .AsNoTracking()
+                .Where(x => x.MemberId == member.Id && x.RestDate >= windowStart && x.RestDate <= today)
+                .Select(x => x.RestDate)
+                .Distinct()
+                .ToListAsync();
 
             var checkinSet = checkinDates.ToHashSet();
+            var restSet = restDates.ToHashSet();
             var points = new List<MemberMissedTrendPointDto>();
             for (var i = normalizedWeeks - 1; i >= 0; i--)
             {
                 var weekStart = today.AddDays(-(i * 7 + 6));
                 var weekEnd = today.AddDays(-i * 7);
                 var attended = 0;
+                var rest = 0;
                 for (var d = weekStart; d.DayNumber <= weekEnd.DayNumber; d = d.AddDays(1))
                 {
                     if (checkinSet.Contains(d))
                     {
                         attended++;
+                    }
+                    else if (restSet.Contains(d))
+                    {
+                        rest++;
                     }
                 }
 
@@ -236,7 +266,7 @@ namespace GymManagementBackend.Services
                 {
                     Label = $"{weekStart:dd MMM}",
                     AttendedDays = attended,
-                    MissedDays = Math.Max(0, 7 - attended)
+                    MissedDays = Math.Max(0, 7 - attended - rest)
                 });
             }
 
@@ -339,6 +369,105 @@ namespace GymManagementBackend.Services
                 AlreadyCheckedIn = true,
                 WorkoutLogged = true
             };
+        }
+
+        public async Task<MemberPortalSummaryDto> UpdateProfileAsync(ClaimsPrincipal user, MemberProfileUpdateRequestDto request)
+        {
+            var member = await ResolveMemberAsync(user);
+
+            member.FullName = request.FullName.Trim();
+            member.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant();
+            member.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+            member.Gender = string.IsNullOrWhiteSpace(request.Gender) ? null : request.Gender.Trim().ToUpperInvariant();
+            member.DateOfBirth = request.DateOfBirth;
+            member.EmergencyContact = string.IsNullOrWhiteSpace(request.EmergencyContact) ? null : request.EmergencyContact.Trim();
+            member.FitnessGoal = string.IsNullOrWhiteSpace(request.FitnessGoal) ? null : request.FitnessGoal.Trim();
+            member.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return await GetSummaryAsync(user);
+        }
+
+        public async Task<MemberRestDayDto> AddRestDayAsync(ClaimsPrincipal user, MemberRestDayRequestDto request)
+        {
+            var member = await ResolveMemberAsync(user);
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var date = request.RestDate;
+            if (date > today)
+            {
+                throw new InvalidOperationException("Rest day can only be set for today or past dates.");
+            }
+
+            var hasCheckin = await _context.MemberCheckins
+                .AsNoTracking()
+                .AnyAsync(x => x.MemberId == member.Id && x.CheckinDate == date);
+            if (hasCheckin)
+            {
+                throw new InvalidOperationException("Attendance already exists for this date. Rest day cannot be marked.");
+            }
+
+            var existing = await _context.MemberRestDays
+                .FirstOrDefaultAsync(x => x.MemberId == member.Id && x.RestDate == date);
+            if (existing is not null)
+            {
+                return new MemberRestDayDto
+                {
+                    Id = existing.Id,
+                    RestDate = existing.RestDate,
+                    Notes = existing.Notes
+                };
+            }
+
+            var previousOne = date.AddDays(-1);
+            var previousTwo = date.AddDays(-2);
+            var nextOne = date.AddDays(1);
+            var nextTwo = date.AddDays(2);
+            var hasPrevOne = await _context.MemberRestDays.AsNoTracking().AnyAsync(x => x.MemberId == member.Id && x.RestDate == previousOne);
+            var hasPrevTwo = await _context.MemberRestDays.AsNoTracking().AnyAsync(x => x.MemberId == member.Id && x.RestDate == previousTwo);
+            var hasNextOne = await _context.MemberRestDays.AsNoTracking().AnyAsync(x => x.MemberId == member.Id && x.RestDate == nextOne);
+            var hasNextTwo = await _context.MemberRestDays.AsNoTracking().AnyAsync(x => x.MemberId == member.Id && x.RestDate == nextTwo);
+
+            if ((hasPrevOne && hasPrevTwo) || (hasPrevOne && hasNextOne) || (hasNextOne && hasNextTwo))
+            {
+                throw new InvalidOperationException("Only 2 continuous rest days are allowed.");
+            }
+
+            var entity = new MemberRestDay
+            {
+                GymId = member.GymId,
+                MemberId = member.Id,
+                RestDate = date,
+                Notes = request.Notes?.Trim(),
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.MemberRestDays.Add(entity);
+            await _context.SaveChangesAsync();
+
+            return new MemberRestDayDto
+            {
+                Id = entity.Id,
+                RestDate = entity.RestDate,
+                Notes = entity.Notes
+            };
+        }
+
+        public async Task<IReadOnlyList<MemberRestDayDto>> GetRestDaysAsync(ClaimsPrincipal user, int months)
+        {
+            var member = await ResolveMemberAsync(user);
+            var normalizedMonths = Math.Clamp(months, 1, 12);
+            var fromDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-normalizedMonths);
+            return await _context.MemberRestDays
+                .AsNoTracking()
+                .Where(x => x.MemberId == member.Id && x.RestDate >= fromDate)
+                .OrderByDescending(x => x.RestDate)
+                .Select(x => new MemberRestDayDto
+                {
+                    Id = x.Id,
+                    RestDate = x.RestDate,
+                    Notes = x.Notes
+                })
+                .ToListAsync();
         }
 
         private async Task<Member> ResolveMemberAsync(ClaimsPrincipal user, bool includeGym = false)
@@ -453,19 +582,38 @@ namespace GymManagementBackend.Services
                 .ToList();
         }
 
-        private static int ComputeCurrentStreak(List<DateOnly> dates, DateOnly today)
+        private static int ComputeCurrentStreak(List<DateOnly> checkinDates, List<DateOnly> restDates, DateOnly today)
         {
-            if (dates.Count == 0)
+            if (checkinDates.Count == 0 && restDates.Count == 0)
             {
                 return 0;
             }
 
-            var set = dates.ToHashSet();
-            var cursor = set.Contains(today) ? today : today.AddDays(-1);
+            var checkinSet = checkinDates.ToHashSet();
+            var restSet = restDates.ToHashSet();
+            var cursor = (checkinSet.Contains(today) || restSet.Contains(today)) ? today : today.AddDays(-1);
             var streak = 0;
+            var consecutiveRest = 0;
 
-            while (set.Contains(cursor))
+            while (true)
             {
+                if (checkinSet.Contains(cursor))
+                {
+                    consecutiveRest = 0;
+                }
+                else if (restSet.Contains(cursor))
+                {
+                    consecutiveRest++;
+                    if (consecutiveRest > 2)
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    break;
+                }
+
                 streak++;
                 cursor = cursor.AddDays(-1);
             }
@@ -473,25 +621,44 @@ namespace GymManagementBackend.Services
             return streak;
         }
 
-        private static int ComputeBestStreak(List<DateOnly> dates)
+        private static int ComputeBestStreak(List<DateOnly> checkinDates, List<DateOnly> restDates)
         {
-            if (dates.Count == 0)
+            if (checkinDates.Count == 0 && restDates.Count == 0)
             {
                 return 0;
             }
 
-            var ordered = dates.Distinct().OrderBy(x => x).ToList();
-            var best = 1;
-            var current = 1;
-            for (var i = 1; i < ordered.Count; i++)
+            var best = 0;
+            var current = 0;
+            var consecutiveRest = 0;
+            var checkinSet = checkinDates.ToHashSet();
+            var restSet = restDates.ToHashSet();
+            var minDate = checkinDates.Concat(restDates).Min();
+            var maxDate = checkinDates.Concat(restDates).Max();
+
+            for (var d = minDate; d.DayNumber <= maxDate.DayNumber; d = d.AddDays(1))
             {
-                if (ordered[i].DayNumber == ordered[i - 1].DayNumber + 1)
+                if (checkinSet.Contains(d))
                 {
+                    consecutiveRest = 0;
                     current++;
+                }
+                else if (restSet.Contains(d))
+                {
+                    consecutiveRest++;
+                    if (consecutiveRest <= 2)
+                    {
+                        current++;
+                    }
+                    else
+                    {
+                        current = 0;
+                    }
                 }
                 else
                 {
-                    current = 1;
+                    current = 0;
+                    consecutiveRest = 0;
                 }
 
                 if (current > best)

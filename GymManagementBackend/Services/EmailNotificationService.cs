@@ -22,6 +22,7 @@ namespace GymManagementBackend.Services
         Task<EmailDeliveryResult> SendGymCreatedEmailAsync(string toEmail, string gymName, string ownerName);
         Task<EmailDeliveryResult> SendUserWelcomeEmailAsync(string toEmail, string fullName, string role, string loginId, string temporaryPassword, string gymName);
         Task<EmailDeliveryResult> SendMemberWelcomeEmailAsync(string toEmail, string memberName, string loginId, string temporaryPassword, string gymName);
+        Task<EmailDeliveryResult> SendPasswordResetCodeEmailAsync(string toEmail, string fullName, string code);
     }
 
     public class EmailNotificationService : IEmailNotificationService
@@ -99,6 +100,7 @@ namespace GymManagementBackend.Services
             var safePassword = Html(temporaryPassword);
             var safeGym = Html(gymName);
             var (headline, bodyText) = ResolveRoleCopy(role);
+            var (featureOne, featureTwo, featureThree) = ResolveRoleFeatures(role);
 
             var fallbackSubject = $"Your {role} account is ready";
             var fallbackHtml = $@"
@@ -129,6 +131,9 @@ namespace GymManagementBackend.Services
                     ["GymName"] = safeGym,
                     ["Headline"] = Html(headline),
                     ["BodyText"] = Html(bodyText),
+                    ["FeatureOne"] = Html(featureOne),
+                    ["FeatureTwo"] = Html(featureTwo),
+                    ["FeatureThree"] = Html(featureThree),
                     ["LoginUrl"] = Html(_settings.LoginUrl),
                     ["BrandImageUrl"] = Html(_settings.BrandImageUrl)
                 });
@@ -176,6 +181,41 @@ namespace GymManagementBackend.Services
                     ["LoginId"] = safeLogin,
                     ["TemporaryPassword"] = safePassword,
                     ["GymName"] = safeGym,
+                    ["LoginUrl"] = Html(_settings.LoginUrl),
+                    ["BrandImageUrl"] = Html(_settings.BrandImageUrl)
+                });
+
+            return await SendAsync(toEmail, resolved.Subject, resolved.Html);
+        }
+
+        public async Task<EmailDeliveryResult> SendPasswordResetCodeEmailAsync(string toEmail, string fullName, string code)
+        {
+            if (!CanSend(toEmail, out var reason))
+            {
+                return new EmailDeliveryResult { Success = false, Message = reason };
+            }
+
+            var safeName = Html(fullName);
+            var safeCode = Html(code);
+            var fallbackSubject = "Password reset code";
+            var fallbackHtml = $@"
+                <div style='font-family:Segoe UI,Arial,sans-serif;line-height:1.55;color:#12263f'>
+                  <h2>Password Reset</h2>
+                  <p>Hi {safeName},</p>
+                  <p>Use the code below to reset your password. This code is valid for 10 minutes.</p>
+                  <div style='background:#f7fafe;border:1px solid #d9e6ff;border-radius:12px;padding:14px'>
+                    <p style='margin:0;font-size:24px;font-weight:800;letter-spacing:4px'>{safeCode}</p>
+                  </div>
+                </div>";
+
+            var resolved = await ResolveEmailContentAsync(
+                "password_reset_code",
+                fallbackSubject,
+                fallbackHtml,
+                new Dictionary<string, string>
+                {
+                    ["FullName"] = safeName,
+                    ["Code"] = safeCode,
                     ["LoginUrl"] = Html(_settings.LoginUrl),
                     ["BrandImageUrl"] = Html(_settings.BrandImageUrl)
                 });
@@ -301,6 +341,34 @@ namespace GymManagementBackend.Services
             };
         }
 
+        private static (string One, string Two, string Three) ResolveRoleFeatures(string role)
+        {
+            var normalized = (role ?? string.Empty).Trim().ToUpperInvariant();
+            return normalized switch
+            {
+                "OWNER" => (
+                    "Set up your gym profile and branding.",
+                    "Onboard your training staff.",
+                    "Track revenue and member growth."
+                ),
+                "TRAINER" => (
+                    "Manage your daily client schedule.",
+                    "Track member workout progress.",
+                    "Keep members engaged and consistent."
+                ),
+                "STAFF" => (
+                    "Handle front-desk operations smoothly.",
+                    "Support member onboarding and queries.",
+                    "Coordinate follow-ups and renewals."
+                ),
+                _ => (
+                    "Access your account securely.",
+                    "Explore your dashboard features.",
+                    "Start your fitness journey today."
+                )
+            };
+        }
+
         private async Task<(string Subject, string Html)> ResolveEmailContentAsync(
             string templateKey,
             string fallbackSubject,
@@ -337,6 +405,7 @@ namespace GymManagementBackend.Services
                 html = $"<div style='margin-bottom:12px'><img src='{Html(resolvedHeroImageUrl)}' alt='Gym Manager' style='max-width:100%;border-radius:12px'/></div>" + html;
             }
 
+            html += BuildEmailFooterHtml(mergedTokens);
             return (subject, html);
         }
 
@@ -348,6 +417,22 @@ namespace GymManagementBackend.Services
                 output = output.Replace($"{{{key}}}", value ?? string.Empty, StringComparison.Ordinal);
             }
             return output;
+        }
+
+        private static string BuildEmailFooterHtml(IReadOnlyDictionary<string, string> tokens)
+        {
+            var year = DateTime.UtcNow.Year;
+            var brandName = "GymManager9353";
+            var gymName = tokens.TryGetValue("GymName", out var gym) ? gym : string.Empty;
+
+            var copyrightLine = string.IsNullOrWhiteSpace(gymName)
+                ? $"© {year} {brandName}. All rights reserved."
+                : $"© {year} {gymName}. Powered by {brandName}.";
+
+            return $@"
+                <div style='margin-top:14px;padding:12px 14px;border-radius:10px;background:#0f1b2d;color:#dbe7f5;text-align:center;font-family:Segoe UI,Arial,sans-serif'>
+                  <p style='margin:0;font-size:12px;line-height:1.5'>{copyrightLine}</p>
+                </div>";
         }
     }
 }

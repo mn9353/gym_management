@@ -33,6 +33,30 @@ namespace GymManagementBackend.Controllers
             return Ok(response);
         }
 
+        [HttpPost("forgot-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+        {
+            var (success, message) = await _authService.SendPasswordResetCodeAsync(request);
+            return success ? Ok(new { success, message }) : BadRequest(new { success, message });
+        }
+
+        [HttpPost("verify-reset-code")]
+        [AllowAnonymous]
+        public async Task<IActionResult> VerifyResetCode([FromBody] VerifyResetCodeRequest request)
+        {
+            var (success, message) = await _authService.VerifyPasswordResetCodeAsync(request);
+            return success ? Ok(new { success, message }) : BadRequest(new { success, message });
+        }
+
+        [HttpPost("reset-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithCodeRequest request)
+        {
+            var (success, message) = await _authService.ResetPasswordWithCodeAsync(request);
+            return success ? Ok(new { success, message }) : BadRequest(new { success, message });
+        }
+
         [HttpPost("refresh-token")]
         [AllowAnonymous]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)

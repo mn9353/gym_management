@@ -65,6 +65,24 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpPatch("profile")]
+        public async Task<IActionResult> UpdateProfile([FromBody] MemberProfileUpdateRequestDto request)
+        {
+            try
+            {
+                var result = await _memberPortalService.UpdateProfileAsync(User, request);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpGet("attendance")]
         public async Task<IActionResult> GetAttendance([FromQuery] int months = 3, [FromQuery] int limit = 45)
         {
@@ -104,6 +122,38 @@ namespace GymManagementBackend.Controllers
             catch (UnauthorizedAccessException ex)
             {
                 return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        [HttpGet("rest-days")]
+        public async Task<IActionResult> GetRestDays([FromQuery] int months = 3)
+        {
+            try
+            {
+                var result = await _memberPortalService.GetRestDaysAsync(User, months);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("rest-days")]
+        public async Task<IActionResult> AddRestDay([FromBody] MemberRestDayRequestDto request)
+        {
+            try
+            {
+                var result = await _memberPortalService.AddRestDayAsync(User, request);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
         }
 
