@@ -1057,12 +1057,17 @@ namespace GymManagementBackend.Services
                 request.Filters ??= new MemberListQueryDto();
 
                 var normalizedStage = (request.Stage ?? string.Empty).Trim().ToUpperInvariant();
-                if (normalizedStage is not ("EXPIRING" or "INACTIVE"))
+                if (normalizedStage is not ("AUTO" or "EXPIRING" or "INACTIVE"))
                 {
-                    throw new InvalidOperationException("Stage must be either EXPIRING or INACTIVE.");
+                    throw new InvalidOperationException("Stage must be AUTO, EXPIRING, or INACTIVE.");
                 }
 
-                var effectiveSegment = normalizedStage == "INACTIVE" ? "inactive" : "upcoming";
+                var effectiveSegment = normalizedStage switch
+                {
+                    "INACTIVE" => "inactive",
+                    "EXPIRING" => "upcoming",
+                    _ => string.IsNullOrWhiteSpace(request.Segment) ? "all" : request.Segment.Trim().ToLowerInvariant()
+                };
                 if (!request.SelectAll && (request.MemberIds == null || request.MemberIds.Count == 0))
                 {
                     throw new InvalidOperationException("Select at least one member or use Select All.");
@@ -1098,9 +1103,14 @@ namespace GymManagementBackend.Services
                     result.MatchedCount = targets.Count;
                 }
 
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
                 foreach (var target in targets)
                 {
-                    var alreadySentForCurrentPlan = normalizedStage switch
+                    var memberStage = normalizedStage == "AUTO"
+                        ? (target.Status?.ToUpperInvariant() == "EXPIRED" || target.PlanEndDate < today ? "INACTIVE" : "EXPIRING")
+                        : normalizedStage;
+
+                    var alreadySentForCurrentPlan = memberStage switch
                     {
                         "EXPIRING" => target.ExpiringReminderPlanEndDate.HasValue
                                       && target.ExpiringReminderPlanEndDate.Value == target.PlanEndDate,
@@ -1128,12 +1138,12 @@ namespace GymManagementBackend.Services
                         target.PlanEndDate,
                         target.AmountToPay ?? 0m,
                         target.AmountPaid ?? 0m,
-                        normalizedStage);
+                        memberStage);
 
                     if (sendResult.Success)
                     {
                         var sentAt = DateTime.UtcNow;
-                        if (normalizedStage == "EXPIRING")
+                        if (memberStage == "EXPIRING")
                         {
                             await _context.Members
                                 .Where(m => m.Id == target.Id && m.GymId == gymId)
@@ -1268,8 +1278,21 @@ namespace GymManagementBackend.Services
 
             if (!string.IsNullOrWhiteSpace(filters.PaymentStatus))
             {
-                var paymentStatus = filters.PaymentStatus.Trim().ToUpperInvariant();
-                query = query.Where(m => m.PaymentStatus != null && m.PaymentStatus.ToUpper() == paymentStatus);
+                var statuses = filters.PaymentStatus
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(s => s.ToUpperInvariant())
+                    .Distinct()
+                    .ToList();
+
+                if (statuses.Count == 1)
+                {
+                    var paymentStatus = statuses[0];
+                    query = query.Where(m => m.PaymentStatus != null && m.PaymentStatus.ToUpper() == paymentStatus);
+                }
+                else if (statuses.Count > 1)
+                {
+                    query = query.Where(m => m.PaymentStatus != null && statuses.Contains(m.PaymentStatus.ToUpper()));
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(filters.MembershipType))
@@ -1460,6 +1483,7 @@ namespace GymManagementBackend.Services
                 Id = m.Id,
                 FullName = m.FullName,
                 Email = m.Email,
+                Status = m.Status,
                 PlanEndDate = m.PlanEndDate,
                 AmountPaid = m.AmountPaid,
                 AmountToPay = m.AmountToPay,
@@ -1473,6 +1497,7 @@ namespace GymManagementBackend.Services
             public Guid Id { get; set; }
             public string FullName { get; set; } = string.Empty;
             public string? Email { get; set; }
+            public string? Status { get; set; }
             public DateOnly PlanEndDate { get; set; }
             public decimal? AmountPaid { get; set; }
             public decimal? AmountToPay { get; set; }

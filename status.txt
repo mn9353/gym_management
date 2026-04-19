@@ -1,0 +1,7 @@
+ M GymManagementBackend/DTOs/MemberDtos.cs
+ M GymManagementBackend/Program.cs
+ M GymManagementBackend/Services/MemberService.cs
+ M GymManagementBackend/appsettings.Local.example.json
+ M GymManagementBackend/appsettings.json
+?? branch.txt
+?? status.txt

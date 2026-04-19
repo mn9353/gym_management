@@ -135,8 +135,66 @@ builder.Services.AddCors(options =>
             return;
         }
 
-        policy.WithOrigins(normalizedOrigins)
-              .AllowAnyMethod()
+        var wildcardSubdomainOrigins = normalizedOrigins
+            .Where(origin =>
+            {
+                if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                {
+                    return false;
+                }
+
+                return uri.Host.StartsWith("*.");
+            })
+            .ToArray();
+
+        var explicitOrigins = normalizedOrigins
+            .Except(wildcardSubdomainOrigins, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (wildcardSubdomainOrigins.Length > 0)
+        {
+            var wildcardDomainRules = wildcardSubdomainOrigins
+                .Select(origin =>
+                {
+                    var uri = new Uri(origin);
+                    return new
+                    {
+                        Scheme = uri.Scheme,
+                        Domain = uri.Host[2..] // strip "*."
+                    };
+                })
+                .ToArray();
+
+            policy.SetIsOriginAllowed(requestOrigin =>
+            {
+                if (string.IsNullOrWhiteSpace(requestOrigin) || !Uri.TryCreate(requestOrigin, UriKind.Absolute, out var requestUri))
+                {
+                    return false;
+                }
+
+                var explicitMatch = explicitOrigins.Any(explicitOrigin =>
+                    Uri.TryCreate(explicitOrigin, UriKind.Absolute, out var explicitUri)
+                    && string.Equals(explicitUri.Scheme, requestUri.Scheme, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(explicitUri.Host, requestUri.Host, StringComparison.OrdinalIgnoreCase)
+                    && explicitUri.Port == requestUri.Port);
+
+                if (explicitMatch)
+                {
+                    return true;
+                }
+
+                return wildcardDomainRules.Any(rule =>
+                    string.Equals(rule.Scheme, requestUri.Scheme, StringComparison.OrdinalIgnoreCase)
+                    && (string.Equals(requestUri.Host, rule.Domain, StringComparison.OrdinalIgnoreCase)
+                        || requestUri.Host.EndsWith($".{rule.Domain}", StringComparison.OrdinalIgnoreCase)));
+            });
+        }
+        else
+        {
+            policy.WithOrigins(explicitOrigins);
+        }
+
+        policy.AllowAnyMethod()
               .AllowAnyHeader();
     });
 });

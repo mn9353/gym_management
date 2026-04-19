@@ -374,7 +374,7 @@ namespace GymManagementBackend.DTOs
     {
         public bool SelectAll { get; set; } = false;
         public List<Guid> MemberIds { get; set; } = new();
-        public string Stage { get; set; } = "EXPIRING";
+        public string Stage { get; set; } = "AUTO";
         public string Segment { get; set; } = "upcoming";
         public MemberListQueryDto Filters { get; set; } = new();
     }
