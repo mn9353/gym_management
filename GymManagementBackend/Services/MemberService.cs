@@ -1630,7 +1630,7 @@ namespace GymManagementBackend.Services
             {
                 GymId = member.GymId,
                 MemberId = member.Id,
-                InvoiceNumber = await GenerateInvoiceNumberAsync(member.GymId),
+                InvoiceNumber = GenerateInvoiceNumber(member.GymId),
                 InvoiceDate = planStartDate,
                 DueDate = planStartDate,
                 Status = status == "PAID" ? "PAID" : "ISSUED",
@@ -1733,13 +1733,12 @@ namespace GymManagementBackend.Services
             return (serviceType.Id, servicePlan.Id);
         }
 
-        private async Task<string> GenerateInvoiceNumberAsync(Guid gymId)
+        private static string GenerateInvoiceNumber(Guid gymId)
         {
-            var datePart = DateTime.UtcNow.ToString("yyyyMMdd");
-            var prefix = $"INV-{datePart}";
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var count = await _context.Invoices.CountAsync(x => x.GymId == gymId && x.InvoiceDate == today);
-            return $"{prefix}-{(count + 1):D4}";
+            var now = DateTime.UtcNow;
+            var gymToken = gymId.ToString("N")[..6].ToUpperInvariant();
+            var randomToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(3)); // 6 chars
+            return $"INV-{now:yyyyMMddHHmmssfff}-{gymToken}-{randomToken}";
         }
 
         private async Task ApplyPaymentToCurrentLedgerAsync(Member member, decimal paymentAmount, Payment payment)
