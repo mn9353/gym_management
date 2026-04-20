@@ -786,9 +786,98 @@ public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid g
                 {
                     return false;
                 }
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                // Hard cleanup for member-linked data to avoid leftovers if DB constraints vary across environments.
+                await _context.MemberWorkoutLogs
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .ExecuteDeleteAsync();
+
+                await _context.MemberRestDays
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .ExecuteDeleteAsync();
+
+                await _context.MemberBodyMetrics
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .ExecuteDeleteAsync();
+
+                await _context.MemberCheckins
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .ExecuteDeleteAsync();
+
+                var subscriptionIds = await _context.MemberSubscriptions
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .Select(x => x.Id)
+                    .ToListAsync();
+
+                if (subscriptionIds.Count > 0)
+                {
+                    await _context.SubscriptionMonthServices
+                        .Where(x => x.GymId == gymId && subscriptionIds.Contains(x.MemberSubscriptionId))
+                        .ExecuteDeleteAsync();
+
+                    await _context.TrainerAssignments
+                        .Where(x => x.GymId == gymId && x.MemberSubscriptionId.HasValue && subscriptionIds.Contains(x.MemberSubscriptionId.Value))
+                        .ExecuteDeleteAsync();
+                }
+
+                await _context.TrainerAssignments
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .ExecuteDeleteAsync();
+
+                var paymentIds = await _context.Payments
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .Select(x => x.Id)
+                    .ToListAsync();
+
+                if (paymentIds.Count > 0)
+                {
+                    await _context.PaymentAllocations
+                        .Where(x => x.GymId == gymId && paymentIds.Contains(x.PaymentId))
+                        .ExecuteDeleteAsync();
+                }
+
+                var invoiceIds = await _context.Invoices
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .Select(x => x.Id)
+                    .ToListAsync();
+
+                if (invoiceIds.Count > 0)
+                {
+                    await _context.PaymentAllocations
+                        .Where(x => x.GymId == gymId && invoiceIds.Contains(x.InvoiceId))
+                        .ExecuteDeleteAsync();
+
+                    await _context.InvoiceLineItems
+                        .Where(x => x.GymId == gymId && invoiceIds.Contains(x.InvoiceId))
+                        .ExecuteDeleteAsync();
+                }
+
+                await _context.MemberSubscriptions
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .ExecuteDeleteAsync();
+
+                await _context.Invoices
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .ExecuteDeleteAsync();
+
+                await _context.Payments
+                    .Where(x => x.GymId == gymId && x.MemberId == memberId)
+                    .ExecuteDeleteAsync();
+
+                await _context.PasswordResetCodes
+                    .Where(x => x.MemberId == memberId)
+                    .ExecuteDeleteAsync();
+
+                await _context.Enquiries
+                    .Where(x => x.GymId == gymId && x.ConvertedMemberId == memberId)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ConvertedMemberId, (Guid?)null));
 
                 _context.Members.Remove(member);
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                await _profileImageStorageService.DeleteImageByUrlAsync(member.ProfileImageUrl);
 
                 _logger.LogInformation($"Member deleted: {memberId}");
                 return true;

@@ -13,6 +13,7 @@ namespace GymManagementBackend.Services
     {
         Task<string?> StoreMemberImageAsync(Guid memberId, string? rawImageValue, CancellationToken cancellationToken = default);
         Task<string?> StoreUserImageAsync(Guid userId, string? rawImageValue, CancellationToken cancellationToken = default);
+        Task DeleteImageByUrlAsync(string? imageUrl, CancellationToken cancellationToken = default);
     }
 
     public class ProfileImageStorageService : IProfileImageStorageService
@@ -36,6 +37,34 @@ namespace GymManagementBackend.Services
         public Task<string?> StoreUserImageAsync(Guid userId, string? rawImageValue, CancellationToken cancellationToken = default)
         {
             return StoreImageAsync("users", userId, rawImageValue, cancellationToken);
+        }
+
+        public async Task DeleteImageByUrlAsync(string? imageUrl, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(imageUrl) || !_settings.Enabled)
+            {
+                return;
+            }
+
+            if (!TryExtractObjectKey(imageUrl, out var key) || string.IsNullOrWhiteSpace(key))
+            {
+                return;
+            }
+
+            ValidateStorageSettings();
+            using var client = BuildS3Client();
+            try
+            {
+                await client.DeleteObjectAsync(new DeleteObjectRequest
+                {
+                    BucketName = _settings.BucketName,
+                    Key = key
+                }, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete image object from storage. Key={Key}", key);
+            }
         }
 
         private async Task<string?> StoreImageAsync(string entityFolder, Guid entityId, string? rawImageValue, CancellationToken cancellationToken)
@@ -119,6 +148,58 @@ namespace GymManagementBackend.Services
 
             var endpoint = _settings.Endpoint.TrimEnd('/');
             return $"{endpoint}/{_settings.BucketName}/{key}";
+        }
+
+        private bool TryExtractObjectKey(string imageUrl, out string key)
+        {
+            key = string.Empty;
+            var normalized = imageUrl.Trim();
+
+            if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+            {
+                return false;
+            }
+
+            var path = Uri.UnescapeDataString(uri.AbsolutePath).Trim('/');
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            var bucketPrefix = $"{_settings.BucketName}/";
+            var objectPublicPrefix = $"storage/v1/object/public/{_settings.BucketName}/";
+            var objectSignPrefix = $"storage/v1/object/sign/{_settings.BucketName}/";
+            var s3Prefix = "storage/v1/s3/";
+
+            if (path.StartsWith(objectPublicPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                key = path[objectPublicPrefix.Length..];
+                return true;
+            }
+
+            if (path.StartsWith(objectSignPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                key = path[objectSignPrefix.Length..];
+                return true;
+            }
+
+            if (path.StartsWith(s3Prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var remainder = path[s3Prefix.Length..];
+                if (remainder.StartsWith(bucketPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    key = remainder[bucketPrefix.Length..];
+                    return true;
+                }
+            }
+
+            if (path.StartsWith(bucketPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                key = path[bucketPrefix.Length..];
+                return true;
+            }
+
+            return false;
         }
 
         private static byte[] DecodeImageBytes(string value)
