@@ -100,7 +100,8 @@ namespace GymManagementBackend.Services
                 BucketName = _settings.BucketName,
                 Key = key,
                 InputStream = compressed,
-                ContentType = "image/jpeg"
+                ContentType = "image/jpeg",
+                DisablePayloadSigning = true
             };
 
             using var client = BuildS3Client();
