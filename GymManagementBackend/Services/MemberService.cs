@@ -32,8 +32,8 @@ namespace GymManagementBackend.Services
         Task<List<MemberDto>> SearchMembersAsync(Guid gymId, MemberSearchDto searchDto);
         Task<List<MemberDto>> GetUpcomingRenewalsAsync(Guid gymId, int days = 7, int limit = 100, int skip = 0);
         Task<MemberSegmentCountsDto> GetSegmentCountsAsync(Guid gymId, int upcomingDays = 7);
-        Task<PagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment);
-        Task<PagedResponseDto<MemberListItemDto>> GetMembersGridAsync(Guid gymId, MemberGridRequestDto request, string segment);
+        Task<MemberPagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment);
+        Task<MemberPagedResponseDto<MemberListItemDto>> GetMembersGridAsync(Guid gymId, MemberGridRequestDto request, string segment);
         Task<SubscriptionReminderDispatchResultDto> SendSubscriptionRemindersAsync(Guid gymId, SendSubscriptionReminderRequestDto request);
     }
 
@@ -879,7 +879,7 @@ public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid g
             };
         }
 
-        public async Task<PagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment)
+        public async Task<MemberPagedResponseDto<MemberListItemDto>> GetMembersListAsync(Guid gymId, MemberListQueryDto queryDto, string segment)
         {
             try
             {
@@ -919,13 +919,15 @@ public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid g
                     .ToListAsync();
 
                 var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)normalized.PageSize));
-                return new PagedResponseDto<MemberListItemDto>
+                var pendingAmount = await query.Where(m => m.AmountToPay > (m.AmountPaid ?? 0)).SumAsync(m => m.AmountToPay - (m.AmountPaid ?? 0));
+                return new MemberPagedResponseDto<MemberListItemDto>
                 {
                     Items = items,
                     PageNumber = normalized.PageNumber,
                     PageSize = normalized.PageSize,
                     TotalCount = totalCount,
-                    TotalPages = totalPages
+                    TotalPages = totalPages,
+                    TotalPendingAmount = pendingAmount
                 };
             }
             catch (Exception ex)
@@ -990,7 +992,7 @@ public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid g
             }
         }
 
-        public async Task<PagedResponseDto<MemberListItemDto>> GetMembersGridAsync(Guid gymId, MemberGridRequestDto request, string segment)
+        public async Task<MemberPagedResponseDto<MemberListItemDto>> GetMembersGridAsync(Guid gymId, MemberGridRequestDto request, string segment)
         {
             try
             {
@@ -1051,13 +1053,15 @@ public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid g
                     .ToListAsync();
 
                 var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)request.PageSize));
-                return new PagedResponseDto<MemberListItemDto>
+                var pendingAmount = await query.Where(m => m.AmountToPay > (m.AmountPaid ?? 0)).SumAsync(m => m.AmountToPay - (m.AmountPaid ?? 0));
+                return new MemberPagedResponseDto<MemberListItemDto>
                 {
                     Items = items,
                     PageNumber = request.PageNumber,
                     PageSize = request.PageSize,
                     TotalCount = totalCount,
-                    TotalPages = totalPages
+                    TotalPages = totalPages,
+                    TotalPendingAmount = pendingAmount
                 };
             }
             catch (Exception ex)

@@ -396,7 +396,7 @@ ORDER BY m.month_start;";
             // This is still partially in-memory because of the complex absence logic
             var membersQuery = _context.Members
                 .AsNoTracking()
-                .Where(m => m.GymId == gymId && m.Status == "ACTIVE");
+                .Where(m => m.GymId == gymId && m.Status != "PAUSED" && m.PlanEndDate >= today);
 
             var members = await membersQuery.ToListAsync();
 

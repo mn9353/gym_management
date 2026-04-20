@@ -334,6 +334,11 @@ namespace GymManagementBackend.DTOs
         public int TotalPages { get; set; }
     }
 
+    public class MemberPagedResponseDto<T> : PagedResponseDto<T>
+    {
+        public decimal? TotalPendingAmount { get; set; }
+    }
+
     public class MemberSegmentCountsDto
     {
         public int All { get; set; }
