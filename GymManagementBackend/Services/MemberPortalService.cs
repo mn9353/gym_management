@@ -430,7 +430,7 @@ namespace GymManagementBackend.Services
 
             if ((hasPrevOne && hasPrevTwo) || (hasPrevOne && hasNextOne) || (hasNextOne && hasNextTwo))
             {
-                throw new InvalidOperationException("u dont need more than2 rest days bro please go to the gym!");
+                throw new InvalidOperationException("Hold up, sleepyhead! 🛑 Maximum 2 consecutive rest days allowed. Time to crush a workout instead! 💪");
             }
 
             var entity = new MemberRestDay

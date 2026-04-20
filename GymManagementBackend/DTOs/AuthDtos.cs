@@ -94,4 +94,15 @@ namespace GymManagementBackend.DTOs
         public string? RefreshToken { get; set; }
         public DateTime ExpiresIn { get; set; }
     }
+
+    public class ChangePasswordRequest
+    {
+        [Required]
+        public string OldPassword { get; set; } = string.Empty;
+
+        [Required]
+        [StrongPassword(ErrorMessage = "Password must be 8-100 chars and include uppercase, lowercase, number, and special character.")]
+        [MaxLength(100)]
+        public string NewPassword { get; set; } = string.Empty;
+    }
 }

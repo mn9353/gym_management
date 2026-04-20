@@ -42,6 +42,7 @@ namespace GymManagementBackend.Services
         private readonly GymDbContext _context;
         private readonly ILogger<MemberService> _logger;
         private readonly IEmailNotificationService _emailNotificationService;
+        private readonly IProfileImageStorageService _profileImageStorageService;
         private static readonly Expression<Func<Member, MemberDto>> MemberToDtoProjection = m => new MemberDto
         {
             Id = m.Id,
@@ -77,11 +78,13 @@ namespace GymManagementBackend.Services
         public MemberService(
             GymDbContext context,
             ILogger<MemberService> logger,
-            IEmailNotificationService emailNotificationService)
+            IEmailNotificationService emailNotificationService,
+            IProfileImageStorageService profileImageStorageService)
         {
             _context = context;
             _logger = logger;
             _emailNotificationService = emailNotificationService;
+            _profileImageStorageService = profileImageStorageService;
         }
 
         public async Task<MemberDto> CreateMemberAsync(Guid gymId, CreateMemberDto createMemberDto)
@@ -157,9 +160,10 @@ namespace GymManagementBackend.Services
                     TrainerAssigned = trainerAssigned,
                     LeadSource = createMemberDto.LeadSource?.Trim(),
                     Notes = createMemberDto.Notes?.Trim(),
-                    ProfileImageUrl = createMemberDto.ProfileImageUrl,
+                    ProfileImageUrl = null,
                     Status = ResolveStatusFromPlanEndDate(planEndDate)
                 };
+                member.ProfileImageUrl = await _profileImageStorageService.StoreMemberImageAsync(member.Id, createMemberDto.ProfileImageUrl);
 
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -625,12 +629,16 @@ public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid g
             try
             {
                 var member = await _context.Members
+                    .Include(m => m.Gym)
                     .FirstOrDefaultAsync(m => m.Id == memberId && m.GymId == gymId);
 
                 if (member == null)
                 {
                     throw new KeyNotFoundException($"Member not found");
                 }
+
+                bool emailChanged = false;
+                string newTempPassword = string.Empty;
 
                 if (!string.IsNullOrEmpty(updateMemberDto.FullName))
                     member.FullName = updateMemberDto.FullName;
@@ -639,7 +647,16 @@ public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid g
                     member.Phone = updateMemberDto.Phone;
 
                 if (!string.IsNullOrEmpty(updateMemberDto.Email))
-                    member.Email = updateMemberDto.Email.Trim().ToLowerInvariant();
+                {
+                    var newEmail = updateMemberDto.Email.Trim().ToLowerInvariant();
+                    if (member.Email != newEmail)
+                    {
+                        member.Email = newEmail;
+                        emailChanged = true;
+                        newTempPassword = GenerateTemporaryPassword();
+                        member.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newTempPassword);
+                    }
+                }
 
                 if (!string.IsNullOrEmpty(updateMemberDto.Gender))
                     member.Gender = updateMemberDto.Gender;
@@ -719,10 +736,34 @@ public async Task<MemberRenewalUpdateDto> RenewMemberWithTransactionAsync(Guid g
                     member.Notes = updateMemberDto.Notes;
 
                 if (updateMemberDto.ProfileImageUrl != null)
-                    member.ProfileImageUrl = updateMemberDto.ProfileImageUrl;
+                    member.ProfileImageUrl = await _profileImageStorageService.StoreMemberImageAsync(member.Id, updateMemberDto.ProfileImageUrl);
 
                 member.UpdatedAt = GetDbTimestampNow();
                 await _context.SaveChangesAsync();
+
+                if (emailChanged && member.Gym != null)
+                {
+                    try
+                    {
+                        var gymName = member.Gym.GymName ?? "Your Gym";
+                        await _emailNotificationService.SendMemberWelcomeEmailAsync(
+                            member.Email,
+                            member.FullName,
+                            member.Email,
+                            newTempPassword,
+                            gymName,
+                            member.JoinDate,
+                            member.PlanEndDate,
+                            member.AmountToPay ?? 0m,
+                            member.AmountPaid ?? 0m,
+                            member.PaymentStatus ?? "PENDING"
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError($"Email changed, but failed to send welcome email to {member.Email}: {ex.Message}");
+                    }
+                }
 
                 _logger.LogInformation($"Member updated: {memberId}");
                 return MapMemberToDto(member);

@@ -21,6 +21,7 @@ if (builder.Environment.IsDevelopment())
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<MembershipStatusJobSettings>(builder.Configuration.GetSection("MembershipStatusJob"));
 builder.Services.Configure<EmailNotificationSettings>(builder.Configuration.GetSection("EmailNotifications"));
+builder.Services.Configure<ObjectStorageSettings>(builder.Configuration.GetSection("ObjectStorage"));
 var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 builder.Services.AddSingleton(jwtSettings);
 
@@ -208,6 +209,7 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IEnquiryService, EnquiryService>();
 builder.Services.AddScoped<IMemberPortalService, MemberPortalService>();
 builder.Services.AddScoped<IEmailNotificationService, EmailNotificationService>();
+builder.Services.AddScoped<IProfileImageStorageService, ProfileImageStorageService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddHostedService<MembershipStatusSyncBackgroundService>();
 builder.Services.AddHostedService<AttendanceCleanupBackgroundService>();

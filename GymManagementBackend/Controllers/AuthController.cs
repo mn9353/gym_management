@@ -101,6 +101,15 @@ namespace GymManagementBackend.Controllers
             return Ok(new { message = "Token is valid" });
         }
 
+        [HttpPost("change-password")]
+        [Authorize]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            var userId = User.GetUserId();
+            var (success, message) = await _authService.ChangePasswordAsync(userId, request);
+            return success ? Ok(new { success, message }) : BadRequest(new { success, message });
+        }
+
         [HttpGet("debug-auth")]
         [Authorize]
         public IActionResult DebugAuthContext()

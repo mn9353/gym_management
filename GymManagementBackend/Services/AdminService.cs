@@ -36,15 +36,18 @@ namespace GymManagementBackend.Services
         private readonly GymDbContext _context;
         private readonly ILogger<AdminService> _logger;
         private readonly IEmailNotificationService _emailNotificationService;
+        private readonly IProfileImageStorageService _profileImageStorageService;
 
         public AdminService(
             GymDbContext context,
             ILogger<AdminService> logger,
-            IEmailNotificationService emailNotificationService)
+            IEmailNotificationService emailNotificationService,
+            IProfileImageStorageService profileImageStorageService)
         {
             _context = context;
             _logger = logger;
             _emailNotificationService = emailNotificationService;
+            _profileImageStorageService = profileImageStorageService;
         }
 
         public async Task<List<GymDto>> GetGymsAsync()
@@ -325,6 +328,7 @@ namespace GymManagementBackend.Services
                 Role = role,
                 IsActive = true
             };
+            user.ProfileImageUrl = await _profileImageStorageService.StoreUserImageAsync(user.Id, request.ProfileImageUrl);
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
@@ -378,6 +382,7 @@ namespace GymManagementBackend.Services
                 Role = role,
                 IsActive = true
             };
+            user.ProfileImageUrl = await _profileImageStorageService.StoreUserImageAsync(user.Id, request.ProfileImageUrl);
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
@@ -443,6 +448,10 @@ namespace GymManagementBackend.Services
                     await EnsureOwnerCapacityAsync(user.GymId.Value, 1);
                 }
                 user.Role = newRole;
+            }
+            if (request.ProfileImageUrl is not null)
+            {
+                user.ProfileImageUrl = await _profileImageStorageService.StoreUserImageAsync(user.Id, request.ProfileImageUrl);
             }
             if (request.IsActive.HasValue) user.IsActive = request.IsActive.Value;
             user.UpdatedAt = DateTime.UtcNow;
@@ -605,6 +614,7 @@ namespace GymManagementBackend.Services
                 FullName = user.FullName,
                 Email = user.Email,
                 Phone = user.Phone,
+                ProfileImageUrl = user.ProfileImageUrl,
                 Role = user.Role,
                 IsActive = user.IsActive,
                 CreatedAt = user.CreatedAt
@@ -620,6 +630,7 @@ namespace GymManagementBackend.Services
                 FullName = user.FullName,
                 Email = user.Email,
                 Phone = user.Phone,
+                ProfileImageUrl = user.ProfileImageUrl,
                 Role = user.Role,
                 IsActive = user.IsActive,
                 CreatedAt = user.CreatedAt

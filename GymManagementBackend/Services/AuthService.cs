@@ -19,6 +19,7 @@ namespace GymManagementBackend.Services
         Task<TokenResponse> RefreshTokenAsync(string refreshToken, string? ipAddress);
         Task<bool> RevokeRefreshTokenAsync(Guid userId, string refreshToken, string? ipAddress);
         Task<UserDto?> GetByIdAsync(Guid userId);
+        Task<(bool Success, string Message)> ChangePasswordAsync(Guid userId, ChangePasswordRequest request);
     }
 
     public class AuthService : IAuthService
@@ -382,6 +383,42 @@ namespace GymManagementBackend.Services
                 .FirstOrDefaultAsync(m => m.Id == userId);
 
             return member is null ? null : MapMemberToUserDto(member);
+        }
+
+        public async Task<(bool Success, string Message)> ChangePasswordAsync(Guid userId, ChangePasswordRequest request)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            Member? member = null;
+
+            if (user == null)
+            {
+                member = await _context.Members.FirstOrDefaultAsync(m => m.Id == userId);
+                if (member == null)
+                {
+                    return (false, "User not found.");
+                }
+            }
+
+            var currentHash = user?.PasswordHash ?? member?.PasswordHash;
+            if (string.IsNullOrEmpty(currentHash) || !VerifyPassword(request.OldPassword, currentHash))
+            {
+                return (false, "Incorrect old password.");
+            }
+
+            var newHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            if (user != null)
+            {
+                user.PasswordHash = newHash;
+                user.UpdatedAt = DateTime.UtcNow;
+            }
+            else if (member != null)
+            {
+                member.PasswordHash = newHash;
+                member.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+            return (true, "Password changed successfully.");
         }
 
         private RefreshToken BuildRefreshTokenEntity(Guid userId, string plainToken, string? ipAddress)

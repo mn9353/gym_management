@@ -135,6 +135,7 @@ namespace GymManagementBackend.DTOs
         public string FullName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string? Phone { get; set; }
+        public string? ProfileImageUrl { get; set; }
         public string Role { get; set; } = string.Empty;
         public bool IsActive { get; set; }
         public bool? WelcomeEmailSent { get; set; }
@@ -160,6 +161,8 @@ namespace GymManagementBackend.DTOs
         [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
+        public string? ProfileImageUrl { get; set; }
+
         [Required]
         [RegularExpression("^(ADMIN|OWNER|STAFF|TRAINER|MEMBER)$")]
         public string Role { get; set; } = "OWNER";
@@ -180,6 +183,8 @@ namespace GymManagementBackend.DTOs
         [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
 
+        public string? ProfileImageUrl { get; set; }
+
         [Required]
         [RegularExpression("^(STAFF|TRAINER)$")]
         public string Role { get; set; } = "STAFF";
@@ -197,6 +202,8 @@ namespace GymManagementBackend.DTOs
         [StringLength(15)]
         [IndianPhone(ErrorMessage = "Phone must be in +91XXXXXXXXXX format.")]
         public string? Phone { get; set; }
+
+        public string? ProfileImageUrl { get; set; }
 
         [RegularExpression("^(ADMIN|OWNER|STAFF|TRAINER|MEMBER)$")]
         public string? Role { get; set; }
