@@ -16,6 +16,7 @@ namespace GymManagementBackend.Services
         Task<IReadOnlyList<MemberMuscleDistributionDto>> GetMonthlyMuscleDistributionAsync(ClaimsPrincipal user, int months);
         Task<MemberPortalSummaryDto> UpdateProfileAsync(ClaimsPrincipal user, MemberProfileUpdateRequestDto request);
         Task<MemberRestDayDto> AddRestDayAsync(ClaimsPrincipal user, MemberRestDayRequestDto request);
+        Task DeleteRestDayAsync(ClaimsPrincipal user, Guid restDayId);
         Task<IReadOnlyList<MemberRestDayDto>> GetRestDaysAsync(ClaimsPrincipal user, int months);
         Task<MemberCheckinResultDto> CheckinByQrAsync(ClaimsPrincipal user, MemberCheckinScanRequestDto request);
         Task<MemberCheckinResultDto> AddWorkoutForCheckinAsync(ClaimsPrincipal user, Guid checkinId, MemberWorkoutLogRequestDto request);
@@ -429,7 +430,7 @@ namespace GymManagementBackend.Services
 
             if ((hasPrevOne && hasPrevTwo) || (hasPrevOne && hasNextOne) || (hasNextOne && hasNextTwo))
             {
-                throw new InvalidOperationException("Only 2 continuous rest days are allowed.");
+                throw new InvalidOperationException("u dont need more than2 rest days bro please go to the gym!");
             }
 
             var entity = new MemberRestDay
@@ -450,6 +451,28 @@ namespace GymManagementBackend.Services
                 RestDate = entity.RestDate,
                 Notes = entity.Notes
             };
+        }
+
+        public async Task DeleteRestDayAsync(ClaimsPrincipal user, Guid restDayId)
+        {
+            var member = await ResolveMemberAsync(user);
+
+            var existing = await _context.MemberRestDays
+                .FirstOrDefaultAsync(x => x.Id == restDayId && x.MemberId == member.Id);
+
+            if (existing is null)
+            {
+                throw new KeyNotFoundException("Rest day not found.");
+            }
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (existing.RestDate < today)
+            {
+                throw new InvalidOperationException("Cannot delete a past rest day.");
+            }
+
+            _context.MemberRestDays.Remove(existing);
+            await _context.SaveChangesAsync();
         }
 
         public async Task<IReadOnlyList<MemberRestDayDto>> GetRestDaysAsync(ClaimsPrincipal user, int months)

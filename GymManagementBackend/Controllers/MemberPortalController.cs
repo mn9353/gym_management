@@ -157,6 +157,28 @@ namespace GymManagementBackend.Controllers
             }
         }
 
+        [HttpDelete("rest-days/{id:guid}")]
+        public async Task<IActionResult> DeleteRestDay(Guid id)
+        {
+            try
+            {
+                await _memberPortalService.DeleteRestDayAsync(User, id);
+                return NoContent();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPost("checkin/scan")]
         public async Task<IActionResult> CheckinByQr([FromBody] MemberCheckinScanRequestDto request)
         {
