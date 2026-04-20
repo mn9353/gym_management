@@ -123,6 +123,7 @@ namespace GymManagementBackend.Controllers
         }
 
         [HttpPut("{id}")]
+        [Authorize(Policy = "OwnerOrAdmin")]
         public async Task<IActionResult> UpdateMember(Guid id, [FromBody] UpdateMemberDto updateMemberDto, [FromQuery] Guid? gymId = null)
         {
             try
@@ -151,6 +152,7 @@ namespace GymManagementBackend.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Policy = "OwnerOrAdmin")]
         public async Task<IActionResult> DeleteMember(Guid id, [FromQuery] Guid? gymId = null)
         {
             try
