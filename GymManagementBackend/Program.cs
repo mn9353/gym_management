@@ -99,6 +99,13 @@ builder.Services.AddAuthorization(options =>
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
+    options.AddPolicy("PublicCors", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+
     options.AddPolicy("AppCors", policy =>
     {
         var normalizedOrigins = allowedOrigins

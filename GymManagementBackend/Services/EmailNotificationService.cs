@@ -33,6 +33,7 @@ namespace GymManagementBackend.Services
             decimal amountPaid,
             string paymentStatus);
         Task<EmailDeliveryResult> SendPasswordResetCodeEmailAsync(string toEmail, string fullName, string code);
+        Task<EmailDeliveryResult> SendCustomEmailAsync(string toEmail, string subject, string htmlContent);
         Task<EmailDeliveryResult> SendSubscriptionReminderEmailAsync(
             string toEmail,
             string memberName,
@@ -263,6 +264,16 @@ namespace GymManagementBackend.Services
                 });
 
             return await SendAsync(toEmail, resolved.Subject, resolved.Html);
+        }
+
+        public async Task<EmailDeliveryResult> SendCustomEmailAsync(string toEmail, string subject, string htmlContent)
+        {
+            if (!CanSend(toEmail, out var reason))
+            {
+                return new EmailDeliveryResult { Success = false, Message = reason };
+            }
+
+            return await SendAsync(toEmail, subject, htmlContent);
         }
 
         public async Task<EmailDeliveryResult> SendSubscriptionReminderEmailAsync(
